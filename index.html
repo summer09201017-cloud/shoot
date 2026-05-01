@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#06111f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>雷電．蒼穹突擊</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="assets/icon-192.png" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="hud-panel">
+        <div class="brand">
+          <p class="brand-kicker">THUNDER FORCE PWA</p>
+          <h1>雷電．蒼穹突擊</h1>
+          <p class="brand-copy">
+            Boss、連擊、副武器（散彈／追蹤雷射）、僚機、商店、成就、雙人協力、Replay 全到齊。
+          </p>
+        </div>
+
+        <div class="stats-grid">
+          <article class="stat-card"><span>分數</span><strong id="scoreValue">0</strong></article>
+          <article class="stat-card"><span>連擊倍率</span><strong id="comboValue">×1.0</strong></article>
+          <article class="stat-card"><span>關卡</span><strong id="stageValue">1-1</strong></article>
+          <article class="stat-card"><span>武器</span><strong id="weaponValue">基本</strong></article>
+          <article class="stat-card"><span>生命</span><strong id="livesValue">10</strong></article>
+          <article class="stat-card"><span>炸彈</span><strong id="bombValue">10</strong></article>
+          <article class="stat-card wide">
+            <span>當前血量</span>
+            <div class="meter"><div id="healthBar" class="meter-fill"></div></div>
+            <strong id="healthValue">10 / 10</strong>
+          </article>
+          <article class="stat-card"><span>火力</span><strong id="powerValue">1</strong></article>
+          <article class="stat-card"><span>金幣</span><strong id="creditsValue">0</strong></article>
+          <article id="bossStat" class="stat-card wide boss-stat" hidden>
+            <span id="bossName">Boss</span>
+            <div class="meter boss-meter"><div id="bossBar" class="meter-fill"></div></div>
+            <strong id="bossValue">待命</strong>
+          </article>
+        </div>
+
+        <div class="leaderboard-panel">
+          <div class="panel-heading">
+            <h2>排行榜</h2>
+            <button id="soundButton" class="sound-button" type="button">音效 ON</button>
+          </div>
+          <ol id="leaderboardList" class="leaderboard-list"></ol>
+        </div>
+
+        <div id="messageCard" class="message-card menu-card">
+          <p class="message-tag" id="messageTag">READY</p>
+          <h2 id="messageTitle">10 條命，10 顆炸彈，直接升空</h2>
+          <p id="messageBody">擊落敵機掉落寶物與武器，每 5 wave 出現 Boss。</p>
+
+          <div class="tabs" id="menuTabs">
+            <button data-tab="play" class="tab-button is-active">出擊</button>
+            <button data-tab="select" class="tab-button">機體</button>
+            <button data-tab="shop" class="tab-button">商店</button>
+            <button data-tab="ach" class="tab-button">成就</button>
+            <button data-tab="replay" class="tab-button">紀錄</button>
+          </div>
+
+          <section data-pane="play" class="tab-pane is-active">
+            <label class="row-toggle">
+              <input id="coopToggle" type="checkbox" />
+              雙人協力（P2：WASD 移動，Q 炸彈）
+            </label>
+            <label class="row-toggle">
+              <input id="dailyToggle" type="checkbox" />
+              今日挑戰（固定種子）
+            </label>
+            <label class="row-toggle">
+              <input id="recordToggle" type="checkbox" />
+              錄影模式
+            </label>
+            <button id="startButton" class="primary-button">開始戰鬥</button>
+            <p class="hint">控制：方向鍵 / 滑鼠移動、Shift 聚焦慢速、Space 炸彈、P 暫停</p>
+          </section>
+
+          <section data-pane="select" class="tab-pane">
+            <div id="characterGrid" class="card-grid"></div>
+          </section>
+
+          <section data-pane="shop" class="tab-pane">
+            <p class="shop-currency">擁有金幣 <strong id="shopCredits">0</strong></p>
+            <div id="shopGrid" class="card-grid"></div>
+          </section>
+
+          <section data-pane="ach" class="tab-pane">
+            <div id="achList" class="ach-list"></div>
+          </section>
+
+          <section data-pane="replay" class="tab-pane">
+            <p class="hint">最近一場錄影可在這裡重播或匯出分享。</p>
+            <div class="row-buttons">
+              <button id="replayButton" class="primary-button">重播上一場</button>
+              <button id="exportReplayButton" class="sound-button">匯出</button>
+            </div>
+            <textarea id="replayImport" placeholder="貼上錄影 JSON 後按匯入" rows="3"></textarea>
+            <button id="importReplayButton" class="sound-button">匯入並重播</button>
+          </section>
+        </div>
+
+        <button id="installButton" class="install-button" hidden>安裝到裝置</button>
+      </aside>
+
+      <main class="game-stage">
+        <div class="canvas-wrap">
+          <canvas id="gameCanvas" aria-label="雷電遊戲畫面"></canvas>
+
+          <div class="overlay top-left">
+            <div class="mini-chip">命 <strong id="overlayLives">10</strong></div>
+            <div class="mini-chip">炸 <strong id="overlayBombs">10</strong></div>
+          </div>
+
+          <div class="overlay top-right">
+            <div id="comboChip" class="mini-chip combo-chip" hidden>
+              ×<strong id="comboMult">1.0</strong> <em id="comboCount">0</em>
+            </div>
+          </div>
+
+          <div class="overlay bottom-left">
+            <div class="mini-chip" id="weaponChip">武器：基本</div>
+          </div>
+
+          <div id="pauseOverlay" class="game-overlay" hidden>
+            <h2>已暫停</h2>
+            <p>按 P 或 Esc 繼續</p>
+            <button id="resumeButton" class="primary-button">繼續</button>
+            <button id="quitButton" class="sound-button">放棄回主選單</button>
+          </div>
+
+          <div id="nameEntry" class="game-overlay" hidden>
+            <h2>輸入玩家名稱</h2>
+            <input id="nameInput" maxlength="10" placeholder="無名英雄" />
+            <button id="nameSubmit" class="primary-button">登錄分數</button>
+          </div>
+
+          <button id="bombButton" class="bomb-button" type="button" aria-label="使用炸彈">BOMB</button>
+          <button id="focusButton" class="focus-button" type="button" aria-label="聚焦慢速">FOCUS</button>
+          <button id="pauseButton" class="pause-button" type="button" aria-label="暫停">II</button>
+        </div>
+      </main>
+    </div>
+
+    <script defer src="app.js"></script>
+  </body>
+</html>
