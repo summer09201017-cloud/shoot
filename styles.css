@@ -644,6 +644,29 @@ body[data-scene="name-entry"] .pause-button {
   #gameCanvas {
     max-height: none;
   }
+
+  /* On mobile, when in menu / name-entry, the menu becomes a full-screen modal
+     so the player can see settings/start without scrolling past the canvas. */
+  body[data-scene="menu"] .message-card,
+  body[data-scene="name-entry"] .message-card {
+    position: fixed;
+    inset: 12px;
+    z-index: 100;
+    max-height: calc(100svh - 24px);
+    overflow-y: auto;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.72);
+  }
+
+  body[data-scene="menu"],
+  body[data-scene="name-entry"] {
+    overflow: hidden;
+  }
+
+  /* Hide canvas-side mini-chips while in menu — score/combo/etc. aren't meaningful then. */
+  body[data-scene="menu"] .overlay,
+  body[data-scene="name-entry"] .overlay {
+    display: none;
+  }
 }
 
 @media (max-width: 680px) {
