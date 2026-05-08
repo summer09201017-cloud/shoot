@@ -26,20 +26,21 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 
 ## app.js 主要區塊（依執行順序）
 
-1. **Constants** — `WORLD`、`POWER_CAP=20`、`ENEMY_COUNT_BOOST=1.44`、`BULLET_COUNT_BOOST=1.44`、`BOSS_TELEGRAPH_TIME=0.4`、`CONTINUE_COSTS=[100,250]`、`MAX_CONTINUES=2`
+1. **Constants** — `WORLD`、`POWER_CAP=20`、`ENEMY_COUNT_BOOST=1.728`、`BULLET_COUNT_BOOST=1.728`、`BOSS_TELEGRAPH_TIME=0.4`、`CONTINUE_COSTS=[100,250]`、`MAX_CONTINUES=2`、`STATUS_CHANCE=[0,0.18,0.32,0.48]`
 2. **RNG** — seedable rand() 給 daily challenge / replay
-3. **Storage / Meta progression** — 角色、商店升級、成就持久化在 localStorage
-4. **Audio** — Web Audio osc + noise，包 BGM 用 setInterval
-5. **Weapons** — `default / spread / laser / homing`，4 槽切換（TAB / X / 點 chip）
-6. **State** — 大物件 `state` 含 enemies / bullets / particles / telegraphs / deferredActions / stageClearOverlay / continueOverlay 等
-7. **Player** — `weaponSlots: { default,spread,laser,homing }` 解鎖機制；`hp/maxHp/lives/bombs/power/shield`
-8. **Enemy spawn** — random + formation（V 字/橫掃/三角）；boss 每 5 wave 出現
-9. **Boss patterns** — type-driven dispatch table `BOSS_PATTERNS[type][phase][pickIdx]`
-10. **Telegraphs / Deferred actions** — boss 大招前 0.4s 紅色預告線（line/ring/fan/spark），預定動作排程在 `state.deferredActions`
-11. **Stage Clear / Continue** — 過 10 wave 觸發 stageClearOverlay；死亡且金幣足夠觸發 continueOverlay (15s 倒數)
-12. **Update / Render** — `update(delta)` 主迴圈，包含 low-HP slow-mo (HP < 20% 時 delta × 0.65)
-13. **Replay** — 錄一場 60 fps 的 input frames 存 JSON，可匯入匯出
-14. **Init** — 最後檔尾呼叫 `setScene('menu')`、`registerInput()`、`requestAnimationFrame(tick)`
+3. **Storage / Meta progression** — 角色、商店升級、成就持久化在 localStorage；每日挑戰另存 `tf-daily-leaderboard-v1`
+4. **Audio** — Web Audio chiptune sequencer：lead (square) / bass (triangle) / kick (sine sweep) / hat (noise)，每關不同調式 (`STAGE_BGM`)
+5. **Sprites** — `buildSprites()` 在 init 預生成 OffscreenCanvas pixel-art ships/enemies/bosses，`drawImage` 取代手繪幾何
+6. **Weapons** — `default / spread / laser / homing`，4 槽切換（TAB / X / 點 chip）
+7. **State** — 大物件 `state` 含 enemies / bullets / particles / telegraphs / deferredActions / zaps / stageClearOverlay / continueOverlay 等
+8. **Player** — `weaponSlots: { default,spread,laser,homing }` 解鎖；`hp/maxHp/lives/bombs/power/shield/perk`
+9. **Enemy spawn** — random + formation（V 字/橫掃/三角）；boss 每 5 wave 出現；敵人有 `frozenUntil/burnUntil/burnDps` 狀態欄位
+10. **Boss patterns** — type-driven dispatch `BOSS_PATTERNS[type][phase][pickIdx]`
+11. **Telegraphs / Deferred / Zaps** — boss 大招前 0.4s 紅色預告線；感電連鎖用 `pushZap` 畫閃電
+12. **Stage Clear / Continue** — 過 10 wave 觸發 stageClearOverlay；死亡且金幣足夠觸發 continueOverlay (15s 倒數)
+13. **Update / Render** — `update(delta)` 主迴圈，包含 low-HP slow-mo (HP < 20% 時 delta × 0.65)
+14. **Replay** — 錄一場 60 fps 的 input frames 存 JSON，可匯入匯出
+15. **Init** — 最後檔尾呼叫 `buildSprites()`、`setScene('menu')`、`registerInput()`、`requestAnimationFrame(tick)`
 
 ## 重要設計慣例
 
@@ -93,16 +94,36 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - `git config core.autocrlf` 開啟，BAT 檔案存 LF 但 checkout 為 CRLF
 - Commit message 中文 OK，但有 Co-Authored-By trailer 給 Claude
 
-## CP 值待辦（從本次規劃）
+## CP 值待辦（從歷次規劃）
 
 S 級已完成：boss patterns / stage clear / continue / telegraph / slow-mo / weapon slots / power 1–20 視覺指示器。
 
-A 級候選（半天到 1 天）：
+A 級已完成（#9–#13）：
+- 程序化 sprite (`buildSprites()`，使用 `<canvas>` pre-render，`drawImage` 取代幾何繪製)
+- Chiptune sequencer BGM (lead/bass/kick/hat 4 軌、每關不同調式、A/B 兩 pattern 交替)
+- 狀態異常子彈：冰凍 / 燃燒 / 感電作為 SHOP perk（`STATUS_CHANCE` table，`maybeApplyStatus` 在子彈命中時 roll）
+- 成就解鎖角色：`boss-5` → Phantom（聚焦更慢、+1 僚機），`combo-100` → Tempest（射速 ×1.4、HP 6）
+- 每日挑戰雙排行榜：`tf-daily-leaderboard-v1` 獨立儲存，UI 三 tab（總排行 / 今日 / 每日歷代）
+
+A 級候選（尚未做）：
 - Boss Rush 模式 tab
-- 程序化 sprite (OffscreenCanvas pre-render)
-- Chiptune sequencer BGM (8-bar pattern + drum)
-- 狀態異常子彈 (冰凍/燃燒/感電) 商店 perk
-- 成就 → 解鎖角色/皮膚
 - Replay 縮圖 + 多筆儲存
 
-B 級（1–3 天）：腳本化關卡、新角色特殊技、Mid-boss、協力 P2 獨立 HP/Lives。
+B 級（1–3 天）：腳本化關卡、Mid-boss、協力 P2 獨立 HP/Lives。
+
+## 角色 perk 機制
+
+- `CHARACTERS[].perk` 字串，目前支援：
+  - `phantom`: 聚焦速度 ×0.75 (=`FOCUS_FACTOR * 0.75`)、`createPlayer` 時自動 +1 僚機（cap 2）
+  - `tempest`: 純數值差異（高射速、低 HP），無 runtime perk 邏輯
+- 加新 perk → 在 `updatePlayers()` / `createPlayer()` 套用對應行為
+- `lockedBy: "<achievement-id>"` 把角色綁到成就，`isCharacterUnlocked()` 檢查
+
+## 狀態異常子彈
+
+- SHOP 三項：`freeze` / `burn` / `shock`，3 級制
+- 命中機率 = `STATUS_CHANCE[shopLevel]` (0/18%/32%/48%)
+- 冰凍：`enemy.frozenUntil = now + 1500ms`，`updateEnemies` 內以 `moveScale = 0.25` 套用，且暫停射擊
+- 燃燒：`enemy.burnUntil + burnDps`，`updateEnemies` 每 frame 扣 `dps * delta` HP
+- 感電：`chainShock(source, lv)` 找最近 `lv+1` 隻敵人連線，每隻扣 `1+lv` 傷害，畫 `state.zaps` 閃電
+- `maybeApplyStatus` 只對普通子彈呼叫，不對 player laser/beam（避免每 frame proc）
