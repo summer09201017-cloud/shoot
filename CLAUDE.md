@@ -98,16 +98,14 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 
 S 級已完成：boss patterns / stage clear / continue / telegraph / slow-mo / weapon slots / power 1–20 視覺指示器。
 
-A 級已完成（#9–#13）：
-- 程序化 sprite (`buildSprites()`，使用 `<canvas>` pre-render，`drawImage` 取代幾何繪製)
-- Chiptune sequencer BGM (lead/bass/kick/hat 4 軌、每關不同調式、A/B 兩 pattern 交替)
-- 狀態異常子彈：冰凍 / 燃燒 / 感電作為 SHOP perk（`STATUS_CHANCE` table，`maybeApplyStatus` 在子彈命中時 roll）
-- 成就解鎖角色：`boss-5` → Phantom（聚焦更慢、+1 僚機），`combo-100` → Tempest（射速 ×1.4、HP 6）
-- 每日挑戰雙排行榜：`tf-daily-leaderboard-v1` 獨立儲存，UI 三 tab（總排行 / 今日 / 每日歷代）
-
-A 級候選（尚未做）：
-- Boss Rush 模式 tab
-- Replay 縮圖 + 多筆儲存
+A 級已完成（全部 #8–#14）：
+- 程序化 sprite (`buildSprites()`，`<canvas>` pre-render，`drawImage` 取代幾何繪製)
+- Chiptune sequencer BGM (lead/bass/kick/hat 4 軌、每關不同調式、A/B pattern 交替)
+- 狀態異常子彈：冰凍 / 燃燒 / 感電 SHOP perk
+- 成就解鎖角色：`boss-5` → Phantom，`combo-100` → Tempest
+- 每日挑戰雙排行榜：`tf-daily-leaderboard-v1` 獨立儲存，UI tab 切換
+- **Boss Rush 模式**：勾選 toggle 後，連戰 5 隻 boss 計時排行；`state.bossRush + bossRushIdx + bossRushTime`，無小怪 spawn，`tf-bossrush-leaderboard-v1` 排行（依 time 升序）
+- **Replay 多筆儲存（5 槽）+ 縮圖**：`tf-replays-v1` 存 ring buffer，每場結束 `makeReplayThumbnail()` 用 `canvas.toDataURL` 抽 96×160 jpeg；UI 顯示縮圖 grid，第一次點選 = 選中，第二次點選 = 重播
 
 B 級（1–3 天）：腳本化關卡、Mid-boss、協力 P2 獨立 HP/Lives。
 
@@ -127,3 +125,20 @@ B 級（1–3 天）：腳本化關卡、Mid-boss、協力 P2 獨立 HP/Lives。
 - 燃燒：`enemy.burnUntil + burnDps`，`updateEnemies` 每 frame 扣 `dps * delta` HP
 - 感電：`chainShock(source, lv)` 找最近 `lv+1` 隻敵人連線，每隻扣 `1+lv` 傷害，畫 `state.zaps` 閃電
 - `maybeApplyStatus` 只對普通子彈呼叫，不對 player laser/beam（避免每 frame proc）
+
+## Boss Rush 模式
+
+- 勾選『Boss Rush』checkbox 後 startNewGame，`state.bossRush = true`
+- `updateEnemies` 直接跳過小怪 spawn 與 wave clock，只累積 `bossRushTime`
+- `bossDefeated` 後從 `BOSS_RUSH_TYPES`（vanguard → harrier → leviathan → wyrm → phoenix）取下一隻
+- 5 隻全清 → `finishBossRush()` 顯示文字、2.4s 後 `endGame()`
+- HP 公式：`scaledBossHp(380 + idx * 80)` — 比一般戰更硬一點
+- 排行榜依 `time` 升序，`tf-bossrush-leaderboard-v1`，UI tab `data-lb="rush"` 顯示為時間格式
+
+## Replay 多筆儲存
+
+- `MAX_REPLAY_SLOTS = 5`，`tf-replays-v1` 存陣列
+- 新錄影 prepend 到陣列頭，舊的被淘汰（FIFO）
+- 寫入若 quota 失敗，會逐個剝掉最舊的重試直到成功
+- `makeReplayThumbnail()` 用主 canvas `drawImage` 到 96×160 暫存 canvas → jpeg base64
+- UI: replay tab 顯示 grid，每格縮圖 + 分數/wave/日期，第一次點擇選中，第二次播放

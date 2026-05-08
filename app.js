@@ -30,12 +30,14 @@ const els = {
   continueDeclineBtn: $("continueDeclineBtn"),
   stageClearOverlay: $("stageClearOverlay"), stageClearTitle: $("stageClearTitle"), stageClearBody: $("stageClearBody"),
   leaderboard: $("leaderboardList"), lbTabs: $("leaderboardTabs"), soundBtn: $("soundButton"),
-  coopToggle: $("coopToggle"), dailyToggle: $("dailyToggle"), recordToggle: $("recordToggle"),
+  coopToggle: $("coopToggle"), dailyToggle: $("dailyToggle"),
+  bossRushToggle: $("bossRushToggle"), recordToggle: $("recordToggle"),
   difficultySelect: $("difficultySelect"),
   characterGrid: $("characterGrid"), shopGrid: $("shopGrid"), shopCredits: $("shopCredits"),
   achList: $("achList"),
   replayBtn: $("replayButton"), exportReplayBtn: $("exportReplayButton"),
   importReplayBtn: $("importReplayButton"), replayImport: $("replayImport"),
+  replaySlots: $("replaySlots"),
   tabs: $("menuTabs"),
 };
 
@@ -109,10 +111,14 @@ const DIFFICULTIES = {
 const STORAGE = {
   leaderboard: "tf-leaderboard-v3",
   dailyLeaderboard: "tf-daily-leaderboard-v1",
+  bossRushLeaderboard: "tf-bossrush-leaderboard-v1",
   muted: "tf-muted",
   meta: "tf-meta-v3",
-  replay: "tf-replay-v1",
+  replay: "tf-replay-v1",       // legacy single-slot
+  replays: "tf-replays-v1",     // new ring-buffer of up to 5 entries
 };
+const MAX_REPLAY_SLOTS = 5;
+const BOSS_RUSH_TYPES = ["vanguard", "harrier", "leviathan", "wyrm", "phoenix"];
 
 function todayKey(date = new Date()) {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -753,6 +759,10 @@ const state = {
   players: [],
   coop: false,
   daily: false,
+  bossRush: false,
+  bossRushIdx: 0,
+  bossRushTime: 0,
+  bossRushDone: false,
   recording: false,
   weaponsUsed: new Set(),
   bombsThrownThisRun: 0,
@@ -780,9 +790,38 @@ const state = {
 let lastTimestamp = 0;
 let leaderboard = loadLeaderboard();
 let dailyLeaderboard = loadDailyLeaderboard();
+let bossRushLeaderboard = loadBossRushLeaderboard();
 let deferredPrompt = null;
 let pendingHighScore = null;
 let lastReplay = loadJSON(STORAGE.replay, null);
+let replays = loadReplays();
+
+function loadReplays() {
+  const arr = loadJSON(STORAGE.replays, null);
+  if (Array.isArray(arr)) return arr;
+  // Migrate legacy single replay if no list yet
+  const legacy = loadJSON(STORAGE.replay, null);
+  return legacy && legacy.frames ? [legacy] : [];
+}
+
+function saveReplays() {
+  try { saveJSON(STORAGE.replays, replays.slice(0, MAX_REPLAY_SLOTS)); } catch {}
+}
+
+function makeReplayThumbnail() {
+  // Snapshot the current canvas at 96x160, downscaled, return data URL.
+  try {
+    const t = document.createElement("canvas");
+    t.width = 96; t.height = 160;
+    const tc = t.getContext("2d");
+    tc.fillStyle = "#040810";
+    tc.fillRect(0, 0, t.width, t.height);
+    tc.drawImage(canvas, 0, 0, t.width, t.height);
+    return t.toDataURL("image/jpeg", 0.55);
+  } catch {
+    return null;
+  }
+}
 
 function difficultyConfig() {
   return DIFFICULTIES[state.difficulty] || DIFFICULTIES.normal;
@@ -888,6 +927,13 @@ function loadDailyLeaderboard() {
     : [];
 }
 
+function loadBossRushLeaderboard() {
+  const arr = loadJSON(STORAGE.bossRushLeaderboard, []);
+  return Array.isArray(arr)
+    ? arr.filter((e) => Number.isFinite(e.time)).sort((a, b) => a.time - b.time).slice(0, 8)
+    : [];
+}
+
 function saveLeaderboard() {
   saveJSON(STORAGE.leaderboard, leaderboard.slice(0, 8));
 }
@@ -895,6 +941,10 @@ function saveLeaderboard() {
 function saveDailyLeaderboard() {
   // Keep at most 64 entries to limit storage; sort already done.
   saveJSON(STORAGE.dailyLeaderboard, dailyLeaderboard.slice(0, 64));
+}
+
+function saveBossRushLeaderboard() {
+  saveJSON(STORAGE.bossRushLeaderboard, bossRushLeaderboard.slice(0, 8));
 }
 
 let leaderboardTab = "all"; // 'all' | 'today' | 'daily'
@@ -910,6 +960,9 @@ function renderLeaderboard() {
   } else if (leaderboardTab === "daily") {
     entries = dailyLeaderboard.slice(0, 8);
     emptyMsg = "尚無每日挑戰紀錄";
+  } else if (leaderboardTab === "rush") {
+    entries = bossRushLeaderboard.slice(0, 8);
+    emptyMsg = "尚無 Boss Rush 紀錄";
   } else {
     entries = leaderboard;
     emptyMsg = "尚無紀錄";
@@ -923,12 +976,18 @@ function renderLeaderboard() {
   entries.forEach((entry) => {
     const li = document.createElement("li");
     const score = document.createElement("strong");
-    score.textContent = `${entry.score}`;
-    const tag = entry.tag || "";
-    const tail = leaderboardTab === "daily" && entry.dateKey
-      ? `　${tag}　Wave ${entry.wave}　${entry.dateKey}`
-      : `　${tag}　Wave ${entry.wave}　${entry.date}`;
-    li.append(score, tail);
+    if (leaderboardTab === "rush") {
+      score.textContent = formatDuration(Math.round(entry.time || 0));
+      const tag = entry.tag || "";
+      li.append(score, `　${tag}　${entry.cleared ? "通關" : "未通關"}　${entry.date || ""}`);
+    } else {
+      score.textContent = `${entry.score}`;
+      const tag = entry.tag || "";
+      const tail = leaderboardTab === "daily" && entry.dateKey
+        ? `　${tag}　Wave ${entry.wave}　${entry.dateKey}`
+        : `　${tag}　Wave ${entry.wave}　${entry.date}`;
+      li.append(score, tail);
+    }
     els.leaderboard.append(li);
   });
 }
@@ -1139,12 +1198,13 @@ const BOSS_TYPES = [
   { id: "phoenix",   name: "STAGE BOSS：不死鳥",    color: "#ff5d5d" },
 ];
 
-function startBossWarning() {
+function startBossWarning(forcedTypeId) {
   state.bossPending = true;
   state.bossWarning = {
     timer: 2.6,
     total: 2.6,
     wave: state.wave,
+    forcedType: forcedTypeId || null,
   };
   audio.bossArrive();
   spawnFloatingText(WORLD.width / 2, 96, "WARNING", "#ff6d6d", 34);
@@ -1152,10 +1212,15 @@ function startBossWarning() {
   shake(10, 0.5);
 }
 
-function spawnBoss() {
-  const type = BOSS_TYPES[(state.stage - 1) % BOSS_TYPES.length];
+function spawnBoss(forcedTypeId) {
+  let type = BOSS_TYPES[(state.stage - 1) % BOSS_TYPES.length];
+  if (forcedTypeId) {
+    const found = BOSS_TYPES.find((t) => t.id === forcedTypeId);
+    if (found) type = found;
+  }
   const tier = Math.floor((state.wave - 1) / BOSS_WAVE_INTERVAL);
-  const hp = scaledBossHp(220 + tier * 140 + state.stage * 80);
+  const hpBase = state.bossRush ? 380 + state.bossRushIdx * 80 : 220 + tier * 140 + state.stage * 80;
+  const hp = scaledBossHp(hpBase);
   state.boss = {
     type: type.id,
     name: type.name,
@@ -1751,7 +1816,27 @@ function bossDefeated(b) {
   state.boss = null;
   state.bossPending = false;
   state.bossWarning = null;
+
+  if (state.bossRush && !state.bossRushDone) {
+    state.bossRushIdx += 1;
+    if (state.bossRushIdx >= BOSS_RUSH_TYPES.length) {
+      finishBossRush();
+    } else {
+      // Brief breather, then warning + next boss
+      pushDeferred(1.5, () => {
+        const nextType = BOSS_RUSH_TYPES[state.bossRushIdx];
+        startBossWarning(nextType);
+      });
+    }
+  }
   syncHud();
+}
+
+function finishBossRush() {
+  state.bossRushDone = true;
+  spawnFloatingText(WORLD.width / 2, WORLD.height / 2, "BOSS RUSH CLEAR", "#66e4ff", 32);
+  // Submit time to dedicated leaderboard at endGame
+  pushDeferred(2.4, () => endGame());
 }
 
 function damagePlayer(p, amount) {
@@ -1976,7 +2061,7 @@ function applyReplayFrame() {
 
 function saveLastReplay() {
   if (state.replayFrames.length === 0) return;
-  lastReplay = {
+  const entry = {
     seed: state.rngSeed,
     char: meta.selectedCharacter,
     coop: state.coop,
@@ -1986,8 +2071,22 @@ function saveLastReplay() {
     score: Math.floor(state.score),
     wave: state.wave,
     date: Date.now(),
+    thumb: makeReplayThumbnail(),
   };
-  try { saveJSON(STORAGE.replay, lastReplay); } catch {}
+  lastReplay = entry;
+  try { saveJSON(STORAGE.replay, entry); } catch {}
+
+  // Prepend to replay list (most recent first), evict oldest beyond cap.
+  // Quota fallback: keep stripping the oldest until save succeeds.
+  replays = [entry, ...replays].slice(0, MAX_REPLAY_SLOTS);
+  let attempts = MAX_REPLAY_SLOTS;
+  while (attempts-- > 0) {
+    try { saveJSON(STORAGE.replays, replays); break; }
+    catch {
+      if (replays.length <= 1) { try { saveJSON(STORAGE.replays, []); } catch {} break; }
+      replays = replays.slice(0, replays.length - 1);
+    }
+  }
 }
 
 // =====================================================================
@@ -2234,14 +2333,18 @@ function updateEnemies(delta) {
   state.formationTimer -= delta;
   state.difficultyTimer += delta;
 
-  if (state.difficultyTimer >= 14) advanceWave();
-
-  if (!state.boss && !state.bossPending) {
-    if (state.spawnTimer <= 0) {
-      spawnEnemy();
-      state.spawnTimer = Math.max(0.24, (1.4 - state.wave * 0.07) / enemyRate());
+  // Boss Rush mode: no organic enemy spawns, no wave clock; track elapsed timer.
+  if (state.bossRush) {
+    if (!state.bossRushDone) state.bossRushTime += delta;
+  } else {
+    if (state.difficultyTimer >= 14) advanceWave();
+    if (!state.boss && !state.bossPending) {
+      if (state.spawnTimer <= 0) {
+        spawnEnemy();
+        state.spawnTimer = Math.max(0.24, (1.4 - state.wave * 0.07) / enemyRate());
+      }
+      if (state.formationTimer <= 0) spawnFormation();
     }
-    if (state.formationTimer <= 0) spawnFormation();
   }
 
   const now = performance.now();
@@ -2305,7 +2408,7 @@ function updateBoss(delta) {
   if (!state.boss) {
     if (state.bossPending && state.bossWarning) {
       state.bossWarning.timer -= delta;
-      if (state.bossWarning.timer <= 0) spawnBoss();
+      if (state.bossWarning.timer <= 0) spawnBoss(state.bossWarning.forcedType);
     }
     return;
   }
@@ -2959,8 +3062,25 @@ function drawCanvasHud() {
   ctx.fillText(`命 ${p.lives}`, 168, WORLD.height - 28);
   ctx.fillText(`炸 ${p.bombs}`, 226, WORLD.height - 28);
   ctx.fillText(`武 ${WEAPONS[p.weapon].name}`, 280, WORLD.height - 28);
-  ctx.fillText(`W ${state.wave}`, 408, WORLD.height - 28);
+  if (state.bossRush) {
+    ctx.fillText(`B ${Math.min(state.bossRushIdx + 1, BOSS_RUSH_TYPES.length)}/${BOSS_RUSH_TYPES.length}`, 408, WORLD.height - 28);
+  } else {
+    ctx.fillText(`W ${state.wave}`, 408, WORLD.height - 28);
+  }
 
+  if (state.bossRush) {
+    const t = state.bossRushTime;
+    const mm = Math.floor(t / 60);
+    const ss = (t % 60).toFixed(2).padStart(5, "0");
+    ctx.fillStyle = "#ffd86c";
+    ctx.font = 'bold 18px "Trebuchet MS", sans-serif';
+    ctx.textAlign = "right";
+    ctx.fillText(`${mm}:${ss}`, WORLD.width - 14, 38);
+    ctx.font = 'bold 10px "Trebuchet MS", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.fillText("BOSS RUSH", WORLD.width - 14, 22);
+    ctx.textAlign = "start";
+  }
 }
 
 function drawTelegraphs() {
@@ -3125,6 +3245,9 @@ function startNewGame(seedOverride) {
   state.runStartMs = performance.now();
   state.lastRunStats = null;
   state.lastEarnedCredits = 0;
+  state.bossRushIdx = 0;
+  state.bossRushTime = 0;
+  state.bossRushDone = false;
   if (!state.replayPlaying) state.replayFrames = [];
 
   state.players = [createPlayer(0)];
@@ -3137,6 +3260,11 @@ function startNewGame(seedOverride) {
   audio.ensure();
   audio.setBgmStage(state.stage);
   audio.startBgm();
+
+  if (state.bossRush) {
+    // Kick off the first boss after a short warning
+    pushDeferred(0.4, () => startBossWarning(BOSS_RUSH_TYPES[0]));
+  }
   syncHud();
 }
 
@@ -3153,6 +3281,19 @@ function endGame() {
   if (state.score >= 50000) unlockAch("score-50k");
   if (state.coop && state.score > 0) unlockAch("co-op");
   if (state.daily && state.score > 0) unlockAch("daily");
+
+  if (state.bossRush && state.bossRushDone) {
+    const entry = {
+      time: Math.round(state.bossRushTime),
+      tag: "玩家",
+      cleared: true,
+      difficulty: state.difficulty,
+      date: new Date().toLocaleDateString("zh-TW"),
+    };
+    bossRushLeaderboard = [...bossRushLeaderboard, entry]
+      .sort((a, b) => a.time - b.time).slice(0, 8);
+    saveBossRushLeaderboard();
+  }
 
   const earned = Math.round(state.score / 200 * (1 + meta.shop.credit * 0.15));
   meta.credits += earned;
@@ -3394,6 +3535,7 @@ function registerInput() {
   els.startBtn.addEventListener("click", () => {
     state.coop = els.coopToggle.checked;
     state.daily = els.dailyToggle.checked;
+    state.bossRush = els.bossRushToggle ? els.bossRushToggle.checked : false;
     state.recording = els.recordToggle.checked;
     state.difficulty = els.difficultySelect?.value || "normal";
     startNewGame();
@@ -3427,14 +3569,17 @@ function registerInput() {
     if (tab === "shop") renderShop();
     if (tab === "select") renderCharacters();
     if (tab === "ach") renderAchievements();
+    if (tab === "replay") renderReplaySlots();
   });
 
   els.replayBtn.addEventListener("click", () => {
-    if (lastReplay) startReplay(lastReplay);
+    const pick = replays[selectedReplayIdx] || replays[0] || lastReplay;
+    if (pick) startReplay(pick);
   });
   els.exportReplayBtn.addEventListener("click", () => {
-    if (!lastReplay) return;
-    const text = JSON.stringify(lastReplay);
+    const pick = replays[selectedReplayIdx] || lastReplay;
+    if (!pick) return;
+    const text = JSON.stringify(pick);
     if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
     els.replayImport.value = text;
   });
@@ -3456,7 +3601,55 @@ function refreshMenuPanels() {
   renderCharacters();
   renderShop();
   renderAchievements();
+  renderReplaySlots();
   els.shopCredits.textContent = meta.credits;
+}
+
+let selectedReplayIdx = 0;
+
+function renderReplaySlots() {
+  if (!els.replaySlots) return;
+  els.replaySlots.replaceChildren();
+  if (replays.length === 0) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "尚無錄影。先勾選『錄影模式』再出擊。";
+    els.replaySlots.append(p);
+    return;
+  }
+  replays.forEach((rp, i) => {
+    const slot = document.createElement("button");
+    slot.type = "button";
+    slot.className = "replay-slot" + (i === selectedReplayIdx ? " is-active" : "");
+    if (rp.thumb) {
+      const img = document.createElement("img");
+      img.src = rp.thumb;
+      img.alt = "thumbnail";
+      slot.append(img);
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "placeholder";
+      ph.textContent = "▶";
+      slot.append(ph);
+    }
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const date = new Date(rp.date || 0);
+    const dateStr = isNaN(date) ? "" : date.toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" });
+    meta.innerHTML = `<strong>${rp.score || 0}</strong>
+      <span>W${rp.wave || 0}．${rp.difficulty || "normal"}</span>
+      <span>${dateStr}${rp.daily ? "．每日" : ""}</span>`;
+    slot.append(meta);
+    slot.addEventListener("click", () => {
+      if (selectedReplayIdx === i) {
+        startReplay(rp);
+      } else {
+        selectedReplayIdx = i;
+        renderReplaySlots();
+      }
+    });
+    els.replaySlots.append(slot);
+  });
 }
 
 function renderCharacters() {

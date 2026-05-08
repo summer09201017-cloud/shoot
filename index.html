@@ -56,6 +56,7 @@
             <button class="lb-tab is-active" data-lb="all" type="button">總排行</button>
             <button class="lb-tab" data-lb="today" type="button">今日</button>
             <button class="lb-tab" data-lb="daily" type="button">每日歷代</button>
+            <button class="lb-tab" data-lb="rush" type="button">Boss Rush</button>
           </div>
           <ol id="leaderboardList" class="leaderboard-list"></ol>
         </div>
@@ -81,6 +82,10 @@
             <label class="row-toggle">
               <input id="dailyToggle" type="checkbox" />
               今日挑戰（固定種子）
+            </label>
+            <label class="row-toggle">
+              <input id="bossRushToggle" type="checkbox" />
+              Boss Rush（連戰 5 隻 Boss、計時排行）
             </label>
             <label class="row-toggle">
               <input id="recordToggle" type="checkbox" />
@@ -113,10 +118,11 @@
           </section>
 
           <section data-pane="replay" class="tab-pane">
-            <p class="hint">最近一場錄影可在這裡重播或匯出分享。</p>
+            <p class="hint">最多保留 5 場錄影，可點選縮圖重播 / 匯出。</p>
+            <div id="replaySlots" class="replay-slots"></div>
             <div class="row-buttons">
               <button id="replayButton" class="primary-button">重播上一場</button>
-              <button id="exportReplayButton" class="sound-button">匯出</button>
+              <button id="exportReplayButton" class="sound-button">匯出選定</button>
             </div>
             <textarea id="replayImport" placeholder="貼上錄影 JSON 後按匯入" rows="3"></textarea>
             <button id="importReplayButton" class="sound-button">匯入並重播</button>
