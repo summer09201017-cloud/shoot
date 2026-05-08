@@ -728,21 +728,29 @@ body[data-scene="name-entry"] .pause-button {
     max-height: none;
   }
 
-  /* On mobile, when in menu / name-entry, the menu becomes a full-screen modal
-     so the player can see settings/start without scrolling past the canvas. */
-  body[data-scene="menu"] .message-card,
-  body[data-scene="name-entry"] .message-card {
-    position: fixed;
-    inset: 12px;
-    z-index: 100;
-    max-height: calc(100svh - 24px);
-    overflow-y: auto;
-    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.72);
+  /* On mobile, when in menu / name-entry, hide the canvas-wrap entirely so the
+     menu (settings + start button) is the only thing the player sees. This is
+     simpler and more reliable than the position:fixed modal approach which can
+     fail on hud-panel due to its backdrop-filter creating a containing block. */
+  body[data-scene="menu"] .canvas-wrap,
+  body[data-scene="name-entry"] .canvas-wrap {
+    display: none;
   }
 
-  body[data-scene="menu"],
-  body[data-scene="name-entry"] {
-    overflow: hidden;
+  body[data-scene="menu"] .hud-panel,
+  body[data-scene="name-entry"] .hud-panel {
+    /* backdrop-filter creates a containing block for fixed descendants — drop it
+       in menu scenes so any future fixed children (toasts etc.) escape correctly. */
+    backdrop-filter: none;
+  }
+
+  body[data-scene="menu"] .message-card,
+  body[data-scene="name-entry"] .message-card {
+    position: relative;
+    inset: auto;
+    max-height: none;
+    z-index: auto;
+    box-shadow: none;
   }
 
   /* Hide canvas-side mini-chips while in menu — score/combo/etc. aren't meaningful then. */
@@ -782,18 +790,8 @@ body[data-scene="name-entry"] .pause-button {
     inset: auto 14px 14px;
   }
 
-  /* On phones, when in menu/name-entry, the canvas-wrap shouldn't force 100svh —
-     keep the menu modal naturally above-the-fold. */
-  body[data-scene="menu"] .canvas-wrap,
-  body[data-scene="name-entry"] .canvas-wrap {
-    min-height: 0;
-  }
-
-  body[data-scene="menu"] .message-card,
-  body[data-scene="name-entry"] .message-card {
-    inset: 12px;
-    max-height: calc(100svh - 24px);
-  }
+  /* (display:none on canvas-wrap inherited from the 980px @media block —
+     no extra rules needed at 680px since menu is already free of canvas.) */
 
   .bomb-button {
     right: 18px;
