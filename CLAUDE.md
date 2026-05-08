@@ -16,12 +16,12 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 
 | 檔案 | 用途 |
 |------|------|
-| `index.html` | DOM 結構：左側 hud-panel（分數/排行/選單/商店/成就/Replay）+ 右側 canvas-wrap |
-| `app.js` | 全部遊戲邏輯（單檔 ~3000 行，無拆檔） |
-| `styles.css` | 全部 CSS（含 PWA mobile 手機版選單修正） |
+| `index.html` | DOM 結構：左側 hud-panel（分數/排行 4-tab/選單/商店/成就/Replay）+ 右側 canvas-wrap |
+| `app.js` | 全部遊戲邏輯（單檔 ~3800 行，無拆檔；含 procedural sprites、chiptune sequencer、boss patterns、replay buffer） |
+| `styles.css` | 全部 CSS（~920 行；含 PWA mobile 手機版選單修正、weapon slots、leaderboard tabs、replay grid） |
 | `sw.js` | Service Worker，HTML/JS/CSS 用 network-first，靜態資源 cache-first |
 | `manifest.webmanifest` | PWA manifest |
-| `run.bat` | Windows 本機 server 啟動腳本 |
+| `run.bat` | Windows 本機 server 啟動腳本（Python → py launcher → PowerShell HttpListener fallback） |
 | `assets/` | icons (192/512/apple-touch/svg) |
 
 ## app.js 主要區塊（依執行順序）
@@ -47,7 +47,7 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - **xlsx-style：只改 .js / .css / .html，本機檔案 = 雲端真理**（無 build step）
 - **沒有框架**：不要引入 React/Vue/Vite。所有 DOM 操作用 `document.getElementById($())`，CSS 修改用 className
 - **不寫測試**：靠手動測 + console
-- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v11）讓舊 cache 失效
+- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v13）讓舊 cache 失效
 - **手機版選單**：`@media (max-width: 980px)` 時 `body[data-scene="menu"] .canvas-wrap { display: none }`，因為 `.hud-panel` 的 `backdrop-filter: blur` 會建立 fixed-positioning containing block，導致 `position:fixed` modal 被綁住。所以我們改成「選單時直接隱藏 canvas」而非 modal overlay
 - **deltaTime 在 slow-mo 時降到 0.65×**，但 audio / parallax 用真實 delta 不縮放
 - **Telegraph 顏色** = pattern 子彈顏色（紅系給強攻擊）
@@ -107,7 +107,25 @@ A 級已完成（全部 #8–#14）：
 - **Boss Rush 模式**：勾選 toggle 後，連戰 5 隻 boss 計時排行；`state.bossRush + bossRushIdx + bossRushTime`，無小怪 spawn，`tf-bossrush-leaderboard-v1` 排行（依 time 升序）
 - **Replay 多筆儲存（5 槽）+ 縮圖**：`tf-replays-v1` 存 ring buffer，每場結束 `makeReplayThumbnail()` 用 `canvas.toDataURL` 抽 96×160 jpeg；UI 顯示縮圖 grid，第一次點選 = 選中，第二次點選 = 重播
 
-B 級（1–3 天）：腳本化關卡、Mid-boss、協力 P2 獨立 HP/Lives。
+B 級（1–3 天，皆未做）：
+- #15 腳本化關卡（intro wave → 中 boss → 編隊 → 主 boss 的時間軸）
+- #16 角色特殊技（Time slow / Auto-deflect / 蓄力大砲 — 按鍵觸發 + 冷卻）
+- #17 Mid-boss（每 stage 第 5 wave）
+- #18 協力 P2 獨立 HP / Lives / Bombs + 復活機制
+
+## localStorage key 一覽
+
+所有寫入透過 `safeSet / saveJSON`，讀取用 `safeGet / loadJSON`：
+
+| Key | 用途 | 寫入時機 |
+|------|------|--------|
+| `tf-meta-v3` | 角色選擇 / 商店升級 / 成就 / boss 累計擊殺 | 商店購買、成就解鎖、選角色 |
+| `tf-leaderboard-v3` | 全模式總排行（top 8 by score） | submitName 後 |
+| `tf-daily-leaderboard-v1` | 每日挑戰排行（top 64，含 dateKey） | submitName 且 state.daily 時 |
+| `tf-bossrush-leaderboard-v1` | Boss Rush 計時排行（top 8 by time asc） | endGame 且 bossRushDone 時 |
+| `tf-replay-v1` | 單筆 last replay（legacy，仍寫入給「重播上一場」用） | saveLastReplay 結束時 |
+| `tf-replays-v1` | 多筆 replay ring buffer（cap 5，含 thumbnail） | saveLastReplay 結束時 |
+| `tf-muted` | "0" / "1" 音效靜音狀態 | audio.toggle |
 
 ## 角色 perk 機制
 
@@ -142,3 +160,20 @@ B 級（1–3 天）：腳本化關卡、Mid-boss、協力 P2 獨立 HP/Lives。
 - 寫入若 quota 失敗，會逐個剝掉最舊的重試直到成功
 - `makeReplayThumbnail()` 用主 canvas `drawImage` 到 96×160 暫存 canvas → jpeg base64
 - UI: replay tab 顯示 grid，每格縮圖 + 分數/wave/日期，第一次點擇選中，第二次播放
+
+## Sprite 預生成
+
+- `buildSprites()` 在 init 階段（fitCanvas 後、setScene 前）跑一次
+- 每個 sprite = 一個獨立 `<canvas>` 在記憶體中（`document.createElement("canvas")`），用 2× 解析度繪製，原尺寸 drawImage 出來
+- 鍵命名規則：`player_<id>` / `enemy_<type>` / `boss_<typeId>` / `wingman`
+- 加新角色 / 敵人類型 → 在 `buildSprites` 裡 push 對應 sprite，draw 函式（`drawPlayers/drawEnemies/drawBoss`）會 fallback 到幾何繪製（保險網）
+- Phoenix 與 Leviathan 的 `drawBoss` 會額外做 slow rotation（`type === "leviathan" || "phoenix"`）
+
+## Chiptune BGM
+
+- `STAGE_BGM[]` 儲存 5 個 stage 的 `{ root, scale[], stepMs }`
+  - 1 = A minor pent / 2 = D phrygian / 3 = E dorian / 4 = G minor / 5 = A harmonic minor
+- 4 軌：lead (square) / bass (triangle, 低 8 度) / kick (sine sweep 120→40 Hz) / hat (高通 noise)
+- 兩 16-step pattern (`LEAD_A`/`LEAD_B`/`BASS_A`/`BASS_B`) 每 4 bar 切換
+- `audio.setBgmStage(stage)` 切調式；如果 `stepMs` 改變，bgmTick 會 reschedule setInterval
+- 加新關卡 → push 新 entry 到 `STAGE_BGM`
