@@ -81,6 +81,15 @@
               <input id="recordToggle" type="checkbox" />
               錄影模式
             </label>
+            <label class="row-toggle">
+              難度
+              <select id="difficultySelect" class="difficulty-select">
+                <option value="easy">簡單</option>
+                <option value="normal" selected>普通</option>
+                <option value="hard">硬派</option>
+                <option value="storm">彈幕</option>
+              </select>
+            </label>
             <button id="startButton" class="primary-button">開始戰鬥</button>
             <p class="hint">控制：方向鍵 / 滑鼠移動、Shift 聚焦慢速、Space 炸彈、P 暫停</p>
           </section>
@@ -129,6 +138,7 @@
 
           <div class="overlay bottom-left">
             <div class="mini-chip" id="weaponChip">武器：基本</div>
+            <div id="weaponSlots" class="weapon-slots"></div>
           </div>
 
           <div id="pauseOverlay" class="game-overlay" hidden>
@@ -142,6 +152,21 @@
             <h2>輸入玩家名稱</h2>
             <input id="nameInput" maxlength="10" placeholder="無名英雄" />
             <button id="nameSubmit" class="primary-button">登錄分數</button>
+          </div>
+
+          <div id="continueOverlay" class="game-overlay continue-overlay" hidden>
+            <p class="overlay-tag">CONTINUE?</p>
+            <h2>還能再戰嗎？</h2>
+            <p id="continueMsg">花費 100 金幣滿血復活</p>
+            <p class="continue-timer">倒數 <strong id="continueTimer">15</strong> 秒</p>
+            <button id="continueAcceptBtn" class="primary-button">復活</button>
+            <button id="continueDeclineBtn" class="sound-button">放棄</button>
+          </div>
+
+          <div id="stageClearOverlay" class="game-overlay stage-clear-overlay" hidden>
+            <p class="overlay-tag">STAGE CLEAR</p>
+            <h2 id="stageClearTitle">STAGE 1 CLEAR</h2>
+            <p id="stageClearBody">+1000 金幣．滿血．火力 +1．武器解鎖</p>
           </div>
 
           <button id="bombButton" class="bomb-button" type="button" aria-label="使用炸彈">BOMB</button>
