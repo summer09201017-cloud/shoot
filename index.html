@@ -64,7 +64,7 @@
         <div id="messageCard" class="message-card menu-card">
           <p class="message-tag" id="messageTag">READY</p>
           <h2 id="messageTitle">10 條命，10 顆炸彈，直接升空</h2>
-          <p id="messageBody">擊落敵機掉落寶物與武器，每 5 wave 出現 Boss。</p>
+          <p id="messageBody">擊碎隕石掉落寶物與武器，每 5 wave 出現巨型隕石 Boss。</p>
 
           <div class="tabs" id="menuTabs">
             <button data-tab="play" class="tab-button is-active">出擊</button>
@@ -90,6 +90,13 @@
             <label class="row-toggle">
               <input id="recordToggle" type="checkbox" />
               錄影模式
+            </label>
+            <label class="row-toggle">
+              戰場
+              <select id="skinSelect" class="difficulty-select">
+                <option value="mech" selected>✈️ 機械戰機（原版）</option>
+                <option value="rock">☄️ 隕石風暴</option>
+              </select>
             </label>
             <label class="row-toggle">
               難度

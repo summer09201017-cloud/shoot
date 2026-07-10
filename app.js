@@ -33,6 +33,7 @@ const els = {
   coopToggle: $("coopToggle"), dailyToggle: $("dailyToggle"),
   bossRushToggle: $("bossRushToggle"), recordToggle: $("recordToggle"),
   difficultySelect: $("difficultySelect"),
+  skinSelect: $("skinSelect"),
   characterGrid: $("characterGrid"), shopGrid: $("shopGrid"), shopCredits: $("shopCredits"),
   achList: $("achList"),
   replayBtn: $("replayButton"), exportReplayBtn: $("exportReplayButton"),
@@ -116,8 +117,23 @@ const STORAGE = {
   meta: "tf-meta-v3",
   replay: "tf-replay-v1",       // legacy single-slot
   replays: "tf-replays-v1",     // new ring-buffer of up to 5 entries
+  skin: "tf-skin",              // 戰場皮膚:mech(機械戰機,原版)/ rock(隕石風暴)
 };
 const MAX_REPLAY_SLOTS = 5;
+
+// 雙皮膚(2026-07-10):開戰前選單可選;純視覺換皮,機制/判定/排行/Replay 全共用
+let currentSkin = null; // init 時從 localStorage 讀
+function getSkin() {
+  if (currentSkin !== "mech" && currentSkin !== "rock") {
+    currentSkin = safeGet(STORAGE.skin) === "rock" ? "rock" : "mech";
+  }
+  return currentSkin;
+}
+function setSkin(v) {
+  currentSkin = v === "rock" ? "rock" : "mech";
+  safeSet(STORAGE.skin, currentSkin);
+}
+function skinSprite(base) { return sprites[base + "_" + getSkin()]; }
 const BOSS_RUSH_TYPES = ["vanguard", "harrier", "leviathan", "wyrm", "phoenix"];
 
 function todayKey(date = new Date()) {
@@ -196,16 +212,16 @@ const SHOP = [
   { id: "wingman", name: "預載僚機", desc: "出生帶 1 隻僚機", max: 2, cost: (lv) => 220 * (lv + 1) },
   { id: "shield",  name: "起始護盾", desc: "出生帶護盾 +3",   max: 4, cost: (lv) => 120 * (lv + 1) },
   { id: "credit",  name: "金幣加成", desc: "得幣 +15%",       max: 4, cost: (lv) => 130 * (lv + 1) },
-  { id: "freeze",  name: "冰凍砲",   desc: "命中機率冰凍敵人 1.5s", max: 3, cost: (lv) => 180 * (lv + 1) },
+  { id: "freeze",  name: "冰凍砲",   desc: "命中機率冰凍目標 1.5s", max: 3, cost: (lv) => 180 * (lv + 1) },
   { id: "burn",    name: "燃燒砲",   desc: "命中機率持續灼傷 3s",   max: 3, cost: (lv) => 180 * (lv + 1) },
-  { id: "shock",   name: "感電砲",   desc: "命中機率對附近敵人連鎖", max: 3, cost: (lv) => 200 * (lv + 1) },
+  { id: "shock",   name: "感電砲",   desc: "命中機率對附近目標連鎖", max: 3, cost: (lv) => 200 * (lv + 1) },
 ];
 
 // Per-shop-level proc chance for status effects.
 const STATUS_CHANCE = [0, 0.18, 0.32, 0.48];
 
 const ACHIEVEMENTS = [
-  { id: "first-blood", name: "初擊",          desc: "擊落第一架敵機" },
+  { id: "first-blood", name: "初擊",          desc: "擊破第一個目標" },
   { id: "wave-10",     name: "前進到 10 波",   desc: "達成 wave 10" },
   { id: "wave-25",     name: "守望者",         desc: "達成 wave 25" },
   { id: "boss-1",      name: "首殺 Boss",      desc: "擊破第一隻 Boss" },
@@ -526,7 +542,8 @@ function drawShip(cx, primary, accent, style) {
   cx.fillRect(-1.5, -2, 3, 3);
 }
 
-function drawEnemyArt(cx, type, color, r) {
+// ✈️ 機械戰機皮膚(原版)——雙皮膚之一,開戰前選單可選
+function drawMechEnemyArt(cx, type, color, r) {
   cx.shadowColor = color;
   cx.shadowBlur = 8;
   cx.fillStyle = type === "elite" ? "#3a2705" : (type === "formation" ? "#0e1a36" : "#3a0a0a");
@@ -569,7 +586,7 @@ function drawEnemyArt(cx, type, color, r) {
   }
 }
 
-function drawBossArt(cx, type) {
+function drawMechBossArt(cx, type) {
   const r = 70;
   cx.shadowBlur = 22;
   if (type === "vanguard") {
@@ -693,6 +710,189 @@ function drawBossArt(cx, type) {
   }
 }
 
+// ☄️ 隕石風暴皮膚(2026-07-10 使用者拍板,開戰前可選):敵機→隕石——basic=岩石隕石(隕石坑)、elite=熔岩隕石(發光裂紋)、
+// formation=冰晶隕石(結晶切面)。射擊機制/波次/掉寶全不動,純換皮;隕石的「子彈」語意=噴發的碎石與火花。
+function drawRockEnemyArt(cx, type, color, r) {
+  // 不規則岩體輪廓(固定頂點=sprite 每次生成一致)
+  const lobes = [1.0, 0.82, 0.95, 0.74, 1.0, 0.86, 0.92, 0.78];
+  cx.shadowColor = color;
+  cx.shadowBlur = 8;
+  cx.fillStyle = type === "elite" ? "#2c1a12" : (type === "formation" ? "#14243e" : "#3b3129");
+  cx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + 0.35;
+    const rr = r * lobes[i];
+    const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+    if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  }
+  cx.closePath();
+  cx.fill();
+  cx.shadowBlur = 0;
+
+  if (type === "formation") {
+    // 冰晶隕石:亮面結晶切面
+    cx.fillStyle = "#2c4a74";
+    cx.beginPath();
+    cx.moveTo(-r * 0.55, -r * 0.2); cx.lineTo(0, -r * 0.75); cx.lineTo(r * 0.5, -r * 0.1);
+    cx.lineTo(r * 0.1, r * 0.55); cx.lineTo(-r * 0.4, r * 0.35);
+    cx.closePath(); cx.fill();
+    cx.fillStyle = color;
+    cx.beginPath();
+    cx.moveTo(-r * 0.25, -r * 0.1); cx.lineTo(0, -r * 0.55); cx.lineTo(r * 0.3, 0);
+    cx.lineTo(0, r * 0.3);
+    cx.closePath(); cx.fill();
+    cx.fillStyle = "rgba(255,255,255,0.8)";
+    cx.fillRect(-r * 0.08, -r * 0.42, r * 0.14, r * 0.14);
+  } else if (type === "elite") {
+    // 熔岩隕石:發光岩漿裂紋+熔心
+    cx.strokeStyle = color;
+    cx.lineWidth = Math.max(2, r * 0.13);
+    cx.lineCap = "round";
+    cx.beginPath();
+    cx.moveTo(-r * 0.6, -r * 0.1); cx.lineTo(-r * 0.15, 0); cx.lineTo(r * 0.1, -r * 0.45);
+    cx.moveTo(-r * 0.15, 0); cx.lineTo(r * 0.05, r * 0.4); cx.lineTo(r * 0.55, r * 0.25);
+    cx.moveTo(r * 0.05, r * 0.4); cx.lineTo(-r * 0.35, r * 0.55);
+    cx.stroke();
+    cx.fillStyle = "#ffe9a0";
+    cx.beginPath(); cx.arc(-r * 0.15, 0, r * 0.12, 0, Math.PI * 2); cx.fill();
+  } else {
+    // 岩石隕石:隕石坑+受光面
+    cx.fillStyle = "#241c16";
+    cx.beginPath(); cx.arc(-r * 0.3, -r * 0.2, r * 0.24, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(r * 0.28, r * 0.22, r * 0.18, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(r * 0.15, -r * 0.42, r * 0.11, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "rgba(255,255,255,0.14)";
+    cx.beginPath(); cx.arc(-r * 0.34, -r * 0.26, r * 0.1, 0, Math.PI * 2); cx.fill();
+  }
+  // 底緣熱光(朝玩家墜落,進氣面微微發燙)
+  cx.strokeStyle = color;
+  cx.globalAlpha = 0.55;
+  cx.lineWidth = Math.max(1.5, r * 0.09);
+  cx.beginPath();
+  cx.arc(0, 0, r * 0.92, Math.PI * 0.2, Math.PI * 0.8);
+  cx.stroke();
+  cx.globalAlpha = 1;
+}
+
+// ☄️ 隕石風暴皮膚 Boss:五顆巨型隕石——同色系/同尺寸(r=70,判定與 telegraph 顏色全不變),
+// 共用「不規則巨岩」底+各自特徵:巨岩先鋒=坑疤岩、裂空隕鐵=金屬晶面、雷晶隕核=能量環結晶、
+// 熔岩巨隕=岩漿裂紋、烈焰彗核=彗星火尾。
+function drawRockBossArt(cx, type) {
+  const r = 70;
+  const COLORS = { vanguard: "#ff8866", harrier: "#ffb84d", leviathan: "#a266ff", wyrm: "#66ff9f", phoenix: "#ff5d5d" };
+  const BODIES = { vanguard: "#3a2318", harrier: "#33281c", leviathan: "#221540", wyrm: "#12321f", phoenix: "#3a1410" };
+  const color = COLORS[type] || "#ff8866";
+  const lobes = [1.0, 0.86, 0.96, 0.78, 1.0, 0.9, 0.82, 0.97, 0.84, 0.94, 0.8, 0.92];
+  // 彗核的火尾先畫(往上,像朝玩家俯衝)
+  if (type === "phoenix") {
+    cx.fillStyle = "rgba(255,170,68,0.55)";
+    cx.beginPath();
+    cx.moveTo(-r * 0.55, -r * 0.5); cx.lineTo(0, -r * 1.55); cx.lineTo(r * 0.55, -r * 0.5);
+    cx.closePath(); cx.fill();
+    cx.fillStyle = "rgba(255,93,93,0.6)";
+    cx.beginPath();
+    cx.moveTo(-r * 0.3, -r * 0.55); cx.lineTo(0, -r * 1.15); cx.lineTo(r * 0.3, -r * 0.55);
+    cx.closePath(); cx.fill();
+  }
+  cx.shadowBlur = 22;
+  cx.shadowColor = color;
+  cx.fillStyle = BODIES[type] || "#3a2318";
+  cx.beginPath();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + 0.2;
+    const rr = r * lobes[i];
+    const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+    if (i === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  }
+  cx.closePath(); cx.fill();
+  cx.shadowBlur = 0;
+
+  if (type === "vanguard") {
+    // 巨岩先鋒:大坑疤+受光面
+    cx.fillStyle = "#241610";
+    cx.beginPath(); cx.arc(-r * 0.35, -r * 0.25, r * 0.26, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(r * 0.33, r * 0.28, r * 0.2, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(r * 0.2, -r * 0.45, r * 0.13, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(-r * 0.25, r * 0.45, r * 0.11, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = color;
+    cx.lineWidth = 4;
+    cx.beginPath(); cx.arc(-r * 0.35, -r * 0.25, r * 0.26, 0, Math.PI * 2); cx.stroke();
+    cx.fillStyle = "rgba(255,255,255,0.12)";
+    cx.beginPath(); cx.arc(-r * 0.42, -r * 0.32, r * 0.1, 0, Math.PI * 2); cx.fill();
+  } else if (type === "harrier") {
+    // 裂空隕鐵:金屬結晶切面
+    cx.fillStyle = "#5a4326";
+    cx.beginPath();
+    cx.moveTo(-r * 0.6, -r * 0.15); cx.lineTo(-r * 0.1, -r * 0.7); cx.lineTo(r * 0.45, -r * 0.25);
+    cx.lineTo(r * 0.2, r * 0.35); cx.lineTo(-r * 0.35, r * 0.4);
+    cx.closePath(); cx.fill();
+    cx.fillStyle = color;
+    cx.beginPath();
+    cx.moveTo(-r * 0.25, -r * 0.15); cx.lineTo(0, -r * 0.5); cx.lineTo(r * 0.28, -r * 0.05);
+    cx.lineTo(0, r * 0.22);
+    cx.closePath(); cx.fill();
+    cx.fillStyle = "rgba(255,255,255,0.7)";
+    cx.fillRect(-r * 0.06, -r * 0.38, r * 0.14, r * 0.12);
+    cx.strokeStyle = "#ffd866";
+    cx.lineWidth = 3;
+    cx.beginPath();
+    cx.moveTo(r * 0.5, r * 0.5); cx.lineTo(r * 0.75, r * 0.72);
+    cx.moveTo(-r * 0.55, r * 0.45); cx.lineTo(-r * 0.78, r * 0.66);
+    cx.stroke();
+  } else if (type === "leviathan") {
+    // 雷晶隕核:紫水晶簇+能量環(保留原能量環意象)
+    cx.strokeStyle = color;
+    cx.lineWidth = 5;
+    cx.beginPath(); cx.arc(0, 0, r * 0.72, 0, Math.PI * 2); cx.stroke();
+    cx.fillStyle = color;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      const x = Math.cos(a) * r * 0.85, y = Math.sin(a) * r * 0.72;
+      cx.beginPath(); cx.arc(x, y, 5, 0, Math.PI * 2); cx.fill();
+    }
+    // 中央晶簇
+    cx.fillStyle = "#7a4ae0";
+    cx.beginPath();
+    cx.moveTo(-r * 0.3, r * 0.15); cx.lineTo(-r * 0.15, -r * 0.4); cx.lineTo(0, r * 0.05);
+    cx.lineTo(r * 0.12, -r * 0.5); cx.lineTo(r * 0.3, r * 0.15);
+    cx.closePath(); cx.fill();
+    cx.fillStyle = "rgba(255,255,255,0.75)";
+    cx.beginPath();
+    cx.moveTo(r * 0.02, -r * 0.42); cx.lineTo(r * 0.12, -r * 0.5); cx.lineTo(r * 0.16, -r * 0.28);
+    cx.closePath(); cx.fill();
+  } else if (type === "wyrm") {
+    // 熔岩巨隕:綠熔流裂紋+熔泡
+    cx.strokeStyle = color;
+    cx.lineWidth = 6;
+    cx.lineCap = "round";
+    cx.beginPath();
+    cx.moveTo(-r * 0.7, -r * 0.1); cx.lineTo(-r * 0.2, 0); cx.lineTo(r * 0.05, -r * 0.5);
+    cx.moveTo(-r * 0.2, 0); cx.lineTo(r * 0.1, r * 0.45); cx.lineTo(r * 0.62, r * 0.3);
+    cx.moveTo(r * 0.1, r * 0.45); cx.lineTo(-r * 0.4, r * 0.6);
+    cx.moveTo(r * 0.05, -r * 0.5); cx.lineTo(r * 0.5, -r * 0.35);
+    cx.stroke();
+    cx.fillStyle = "#bdffd6";
+    cx.beginPath(); cx.arc(-r * 0.2, 0, r * 0.12, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = color;
+    cx.beginPath(); cx.arc(r * 0.35, -r * 0.15, r * 0.07, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(-r * 0.45, r * 0.35, r * 0.06, 0, Math.PI * 2); cx.fill();
+  } else if (type === "phoenix") {
+    // 烈焰彗核:燒紅的核心+底緣熱浪
+    cx.fillStyle = "#ff8a4d";
+    cx.beginPath(); cx.arc(0, r * 0.05, r * 0.34, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#ffd866";
+    cx.beginPath(); cx.arc(0, r * 0.05, r * 0.18, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = color;
+    cx.globalAlpha = 0.7;
+    cx.lineWidth = 6;
+    cx.beginPath(); cx.arc(0, 0, r * 0.9, Math.PI * 0.15, Math.PI * 0.85); cx.stroke();
+    cx.globalAlpha = 1;
+    cx.fillStyle = "#241610";
+    cx.beginPath(); cx.arc(-r * 0.45, -r * 0.3, r * 0.14, 0, Math.PI * 2); cx.fill();
+    cx.beginPath(); cx.arc(r * 0.42, -r * 0.38, r * 0.1, 0, Math.PI * 2); cx.fill();
+  }
+}
+
 function buildSprites() {
   // Player ships — accent color drives the team color
   sprites.player_alpha    = makeSprite(48, 56, (cx) => drawShip(cx, "#66e4ff", "#cfe9ff", "alpha"));
@@ -712,12 +912,18 @@ function buildSprites() {
     cx.beginPath(); cx.arc(0, 0, 1.5, 0, Math.PI * 2); cx.fill();
   });
 
-  sprites.enemy_basic     = makeSprite(40, 40, (cx) => drawEnemyArt(cx, "basic",     "#ff6d6d", 18));
-  sprites.enemy_elite     = makeSprite(60, 60, (cx) => drawEnemyArt(cx, "elite",     "#ffd86c", 26));
-  sprites.enemy_formation = makeSprite(36, 36, (cx) => drawEnemyArt(cx, "formation", "#a8c8ff", 16));
+  // 雙皮膚(2026-07-10 使用者拍板):開戰前選單可選 ✈️ 機械戰機(原版)/☄️ 隕石風暴——
+  // 兩套 sprite 都預生成(_mech/_rock 後綴),skinSprite() 依 getSkin() 取用;機制/判定/掉寶全共用。
+  sprites.enemy_basic_mech     = makeSprite(40, 40, (cx) => drawMechEnemyArt(cx, "basic",     "#ff6d6d", 18));
+  sprites.enemy_elite_mech     = makeSprite(60, 60, (cx) => drawMechEnemyArt(cx, "elite",     "#ffd86c", 26));
+  sprites.enemy_formation_mech = makeSprite(36, 36, (cx) => drawMechEnemyArt(cx, "formation", "#a8c8ff", 16));
+  sprites.enemy_basic_rock     = makeSprite(40, 40, (cx) => drawRockEnemyArt(cx, "basic",     "#ff6d6d", 18));
+  sprites.enemy_elite_rock     = makeSprite(60, 60, (cx) => drawRockEnemyArt(cx, "elite",     "#ffd86c", 26));
+  sprites.enemy_formation_rock = makeSprite(36, 36, (cx) => drawRockEnemyArt(cx, "formation", "#a8c8ff", 16));
 
   ["vanguard", "harrier", "leviathan", "wyrm", "phoenix"].forEach((id) => {
-    sprites["boss_" + id] = makeSprite(170, 170, (cx) => drawBossArt(cx, id));
+    sprites["boss_" + id + "_mech"] = makeSprite(170, 170, (cx) => drawMechBossArt(cx, id));
+    sprites["boss_" + id + "_rock"] = makeSprite(170, 170, (cx) => drawRockBossArt(cx, id));
   });
 }
 
@@ -1191,11 +1397,11 @@ function makeFormationEnemy(id) {
 // =====================================================================
 
 const BOSS_TYPES = [
-  { id: "vanguard",  name: "STAGE BOSS：先鋒護衛",  color: "#ff8866" },
-  { id: "harrier",   name: "STAGE BOSS：獵風者",    color: "#ffb84d" },
-  { id: "leviathan", name: "STAGE BOSS：雷霆鯨",    color: "#a266ff" },
-  { id: "wyrm",      name: "STAGE BOSS：天龍",      color: "#66ff9f" },
-  { id: "phoenix",   name: "STAGE BOSS：不死鳥",    color: "#ff5d5d" },
+  { id: "vanguard",  name: "STAGE BOSS：先鋒護衛",  rockName: "STAGE BOSS：巨岩先鋒", color: "#ff8866" },
+  { id: "harrier",   name: "STAGE BOSS：獵風者",    rockName: "STAGE BOSS：裂空隕鐵", color: "#ffb84d" },
+  { id: "leviathan", name: "STAGE BOSS：雷霆鯨",    rockName: "STAGE BOSS：雷晶隕核", color: "#a266ff" },
+  { id: "wyrm",      name: "STAGE BOSS：天龍",      rockName: "STAGE BOSS：熔岩巨隕", color: "#66ff9f" },
+  { id: "phoenix",   name: "STAGE BOSS：不死鳥",    rockName: "STAGE BOSS：烈焰彗核", color: "#ff5d5d" },
 ];
 
 function startBossWarning(forcedTypeId) {
@@ -1223,7 +1429,7 @@ function spawnBoss(forcedTypeId) {
   const hp = scaledBossHp(hpBase);
   state.boss = {
     type: type.id,
-    name: type.name,
+    name: getSkin() === "rock" ? (type.rockName || type.name) : type.name,
     color: type.color,
     x: WORLD.width / 2,
     y: -120,
@@ -2037,6 +2243,7 @@ function startReplay(payload) {
   state.daily = !!payload.daily;
   state.difficulty = payload.difficulty || "normal";
   if (els.difficultySelect) els.difficultySelect.value = state.difficulty;
+  if (els.skinSelect) els.skinSelect.value = getSkin();
   state.replayPlaying = true;
   state.replayInputs = payload;
   state.replayCursor = 0;
@@ -2771,8 +2978,8 @@ function drawEnemies() {
   state.enemies.forEach((e) => {
     ctx.save();
     ctx.translate(e.x, e.y);
-    const sprite = e.elite ? sprites.enemy_elite
-                  : (e.formation ? sprites.enemy_formation : sprites.enemy_basic);
+    const sprite = e.elite ? skinSprite("enemy_elite")
+                  : (e.formation ? skinSprite("enemy_formation") : skinSprite("enemy_basic"));
     if (sprite) {
       // Status visual tints
       if (e.frozenUntil && now < e.frozenUntil) {
@@ -2829,7 +3036,7 @@ function drawBoss() {
   // Slow rotation for organic bosses, none for warship-like
   const spin = (b.type === "leviathan" || b.type === "phoenix") ? performance.now() / 4000 : 0;
   ctx.rotate(spin);
-  const sprite = sprites["boss_" + b.type];
+  const sprite = sprites["boss_" + b.type + "_" + getSkin()];
   if (sprite) {
     const scale = (b.radius * 2.2) / sprite.w;
     ctx.drawImage(sprite.canvas,
@@ -3467,6 +3674,19 @@ function toCanvasPoint(event) {
 }
 
 function registerInput() {
+  // 戰場皮膚切換(✈️ 機械戰機/☄️ 隕石風暴):存 localStorage,選單文案跟著換
+  if (els.skinSelect) {
+    const syncSkinCopy = () => {
+      if (els.messageBody && state.scene === "menu") {
+        els.messageBody.textContent = getSkin() === "rock"
+          ? "擊碎隕石掉落寶物與武器，每 5 wave 出現巨型隕石 Boss。"
+          : "擊落敵機掉落寶物與武器，每 5 wave 出現 Boss。";
+      }
+    };
+    els.skinSelect.addEventListener("change", () => { setSkin(els.skinSelect.value); syncSkinCopy(); });
+    els.skinSelect.value = getSkin();
+    syncSkinCopy();
+  }
   window.addEventListener("keydown", (event) => {
     if (event.target && (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA")) return;
     const block = ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","KeyW","KeyA","KeyS","KeyD","KeyQ","KeyE","ShiftLeft","ShiftRight","KeyP","Escape","Tab","KeyX"];
@@ -3767,7 +3987,7 @@ refreshMenuPanels();
 showMessage(
   "READY",
   "10 條命，10 顆炸彈，直接升空",
-  "選機體、買強化、開挑戰，擊落敵機掉武器（散彈／雷射／追蹤雷射）。",
+  "選機體、選戰場、買強化，擊破目標掉武器（散彈／雷射／追蹤雷射）。",
   "開始戰鬥"
 );
 syncHud();

@@ -24,6 +24,16 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 | `run.bat` | Windows 本機 server 啟動腳本（Python → py launcher → PowerShell HttpListener fallback） |
 | `assets/` | icons (192/512/apple-touch/svg) |
 
+## 雙皮膚系統（2026-07-10）
+
+- 開戰前選單「戰場」select（`#skinSelect`）：`mech`（✈️ 機械戰機，原版）/ `rock`（☄️ 隕石風暴）
+- 純視覺換皮：`buildSprites()` 預生成兩套 sprite（`enemy_*_mech|_rock`、`boss_<id>_mech|_rock`），
+  取用走 `skinSprite(base)` / boss 用 `sprites["boss_"+type+"_"+getSkin()]`；機制/判定/掉寶/排行/Replay 全共用
+- 皮膚存 `localStorage tf-skin`（`getSkin()/setSkin()`）；切換即時生效（draw 每 frame 查皮膚）
+- Boss 名稱雙版本：`BOSS_TYPES[].name`（機械）/`rockName`（隕石：巨岩先鋒/裂空隕鐵/雷晶隕核/熔岩巨隕/烈焰彗核）
+- 美術函式：`drawMechEnemyArt/drawMechBossArt`（原版）、`drawRockEnemyArt/drawRockBossArt`（隕石）
+- 共用文案改中性（「擊破目標」）；選單 messageBody 依皮膚動態換句
+
 ## app.js 主要區塊（依執行順序）
 
 1. **Constants** — `WORLD`、`POWER_CAP=20`、`ENEMY_COUNT_BOOST=1.728`、`BULLET_COUNT_BOOST=1.728`、`BOSS_TELEGRAPH_TIME=0.4`、`CONTINUE_COSTS=[100,250]`、`MAX_CONTINUES=2`、`STATUS_CHANCE=[0,0.18,0.32,0.48]`
