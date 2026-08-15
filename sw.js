@@ -1,4 +1,4 @@
-const CACHE_NAME = "thunder-force-pwa-v14";
+const CACHE_NAME = "thunder-force-pwa-v15";
 const CORE_ASSETS = [
   "./",
   "./index.html",
