@@ -1,4 +1,4 @@
-const CACHE_NAME = "thunder-force-pwa-v15";
+const CACHE_NAME = "thunder-force-pwa-v16";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -68,4 +68,9 @@ self.addEventListener("fetch", (event) => {
         .catch(() => caches.match("./index.html"));
     })
   );
+});
+
+// 🏷️ 版號回報(0831 VT1 批次):頁尾徽章問「實際執行中的版本」,答案=本 SW 的快取名。
+self.addEventListener('message', function (e) {
+  if (e && e.data === 'GET_VERSION' && e.source) e.source.postMessage({ type: 'SW_VERSION', v: CACHE_NAME });
 });
