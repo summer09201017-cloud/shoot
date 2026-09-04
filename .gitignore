@@ -3,3 +3,7 @@ Thumbs.db
 node_modules/
 *.log
 .claude/
+# wrangler 的本機狀態（部署時產生）。
+# ★ 這個站的 netlify.toml 是 publish = "."，而 CF 也可能拿根目錄部署
+#   ⇒ 不排除的話會把本機狀態傳上公開網站（0904 預防）。
+.wrangler/
