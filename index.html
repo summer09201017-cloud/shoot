@@ -30,6 +30,17 @@
 
 
 </style>
+  <style id="mfsDesktopStyle">
+/* ⛶ 桌機也給放大鈕(v20,D):mfs 補丁只在觸控裝置顯示,桌機以前只能自己按 F11。沉浸樣式在 styles.css 檔尾。 */
+@media (pointer:fine){
+  body:not(.mfs-fs) #mfsFull{position:fixed;display:flex;align-items:center;justify-content:center;
+    top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));
+    z-index:2147482000;width:42px;height:42px;padding:0;border-radius:11px;
+    border:1px solid rgba(255,255,255,.42);background:rgba(9,15,19,.55);color:#fff;
+    cursor:pointer;opacity:.55;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+  body:not(.mfs-fs) #mfsFull:hover,body:not(.mfs-fs) #mfsFull:focus-visible{opacity:1}
+}
+</style>
 </head>
   <body>
     <div class="app-shell">
@@ -38,9 +49,121 @@
           <p class="brand-kicker">THUNDER FORCE PWA</p>
           <h1>雷電．蒼穹突擊</h1>
           <p class="brand-copy">
-            Boss、連擊、副武器（散彈／追蹤雷射）、僚機、商店、成就、雙人協力、Replay 全到齊。
+            Boss、中 Boss、機體特殊技、連擊、副武器（散彈／雷射／追蹤）、僚機、商店、成就、雙人協力、Replay 全到齊。
           </p>
         </div>
+
+        <div id="messageCard" class="message-card menu-card">
+          <p class="message-tag" id="messageTag">READY</p>
+          <h2 id="messageTitle">10 條命，10 顆炸彈，直接升空</h2>
+          <p id="messageBody">擊碎隕石掉落寶物與武器，每 5 wave 出現巨型隕石 Boss。</p>
+
+          <div class="tabs" id="menuTabs">
+            <button data-tab="play" class="tab-button is-active">出擊</button>
+            <button data-tab="select" class="tab-button">機體</button>
+            <button data-tab="shop" class="tab-button">商店</button>
+            <button data-tab="ach" class="tab-button">成就</button>
+            <button data-tab="replay" class="tab-button">紀錄</button>
+          </div>
+
+          <section data-pane="play" class="tab-pane is-active">
+            <button id="startButton" class="primary-button">開始戰鬥</button>
+            <label class="row-toggle">
+              <input id="coopToggle" type="checkbox" />
+              雙人協力（P2：WASD 移動，Q 炸彈）
+            </label>
+            <label class="row-toggle">
+              <input id="dailyToggle" type="checkbox" />
+              今日挑戰（固定種子）
+            </label>
+            <label class="row-toggle">
+              <input id="bossRushToggle" type="checkbox" />
+              Boss Rush（連戰 5 隻 Boss、計時排行）
+            </label>
+            <label class="row-toggle">
+              <input id="recordToggle" type="checkbox" />
+              錄影模式
+            </label>
+            <label class="row-toggle">
+              戰場
+              <select id="skinSelect" class="difficulty-select">
+                <option value="mech" selected>✈️ 機械戰機（原版）</option>
+                <option value="rock">☄️ 隕石風暴</option>
+              </select>
+            </label>
+            <label class="row-toggle">
+              難度
+              <select id="difficultySelect" class="difficulty-select">
+                <option value="easy">簡單</option>
+                <option value="normal" selected>普通</option>
+                <option value="hard">硬派</option>
+                <option value="storm">彈幕</option>
+              </select>
+            </label>
+            <label class="row-toggle">
+              🎵 音樂
+              <select id="bgmVolume" class="difficulty-select" aria-label="音樂音量">
+                <option value="0">關</option><option value="1">小</option><option value="2" selected>中</option><option value="3">大</option>
+              </select>
+            </label>
+            <label class="row-toggle">
+              🔊 音效
+              <select id="sfxVolume" class="difficulty-select" aria-label="音效音量">
+                <option value="0">關</option><option value="1">小</option><option value="2" selected>中</option><option value="3">大</option>
+              </select>
+            </label>
+            <p class="hint">控制：方向鍵 / 滑鼠移動、Shift 聚焦慢速、Space 炸彈、C 特殊技、Tab 切武器、P 暫停（手機：拖曳移動 + 畫面上的 FOCUS / BOMB / SKILL 鈕）</p>
+            <button id="tutorialButton" class="sound-button" type="button">📖 操作教學(第一次玩會自動出現)</button>
+          </section>
+
+          <section data-pane="select" class="tab-pane">
+            <div id="characterGrid" class="card-grid"></div>
+          </section>
+
+          <section data-pane="shop" class="tab-pane">
+            <p class="shop-currency">擁有金幣 <strong id="shopCredits">0</strong></p>
+            <div id="shopGrid" class="card-grid"></div>
+          </section>
+
+          <section data-pane="ach" class="tab-pane">
+            <div id="achList" class="ach-list"></div>
+          </section>
+
+          <section data-pane="replay" class="tab-pane">
+            <p class="hint">最多保留 5 場錄影，可點選縮圖重播 / 匯出。</p>
+            <div id="replaySlots" class="replay-slots"></div>
+            <div class="row-buttons">
+              <button id="replayButton" class="primary-button">重播上一場</button>
+              <button id="exportReplayButton" class="sound-button">匯出選定</button>
+            </div>
+            <textarea id="replayImport" placeholder="貼上錄影 JSON 後按匯入" rows="3"></textarea>
+            <button id="importReplayButton" class="sound-button">匯入並重播</button>
+          </section>
+
+          <!-- 🏷 版本號 + 改版簡歷(艦隊鐵則⑦「版本兩件套」;2026-09-15 使用者:「版本號與簡歷打不開」——
+               以前只有右下角一顆 10 秒就淡出、也點不了的徽章,沒有簡歷)。白話寫給家長/老師,本版在最前、最舊在最後。
+               ★ 改版四處一起改:sw.js CACHE_NAME / 這裡 summary 的 vN / verTag 第一行 vN + 日期 / 前幾版接上一版(scripts/check-vertag.mjs 在守)。 -->
+          <details class="ver-fold" id="verFold">
+            <summary>版本 v20(2026-09-15)・看看前幾版做了什麼</summary>
+            <p id="verTag" class="ver-tag">
+              版本 v20(2026-09-15)・🎮 <b>九件一次到位</b>——①「開始戰鬥」搬到最上面,打開就看得到、不用往下捲(還沒玩過時全是 0 的統計卡先不顯示)②第一次玩會跳「30 秒學會」教學卡,每場開局 5 秒無敵先熟悉操作 ③✨ 每台機體有特殊技(按 C 或畫面上的 SKILL 鈕,有冷卻):標準機・幻影=⏳ 時間減速,速攻機=🛡 彈幕反彈(碰到的敵彈變你的子彈),重裝機・風暴=💥 蓄力大砲 ④每關第 5 波多一隻「中 Boss」,十波各有節奏(前哨→編隊→精英→中 Boss→殘兵→雙編隊→彈幕群→決戰前夕→STAGE BOSS),不再一路重複 ⑤★ 一波都沒被打到,下一波分數 ×2 ⑥💣 結算時剩下的炸彈每顆 +500 分,別亂炸 ⑦🎵 音樂、🔊 音效各自四檔音量,會記住 ⑧電腦版也有 ⛶ 放大鈕,按了收掉左欄、畫面吃滿螢幕高;順手修正電腦版畫面以前被橫向拉寬 16% 的比例 ⑨開啟/完賽/打到 Boss 都有匿名統計(零個資)。<br>
+              前幾版:v19 🏷 <b>版本號與改版簡歷看得到、點得開了</b>——選單最底多了這一段;右下角那顆版號徽章以前 10 秒就消失、也點不了,現在點一下就展開這份簡歷(2026-09-15)
+              ・v18 🩹 <b>修好「裝成 App 打開就無法連上」的隱藏地雷</b>——網站主機會把 index.html 這個網址自動轉到首頁,而離線快取名單裡偏偏列著 index.html,存到的是被轉址過的一份,從主畫面開 App 時瀏覽器拒收;現在名單只認首頁、一個檔一個檔存(2026-09-14)
+              ・v17 ⛶ <b>手機放大鈕</b>——右上角一顆,把瀏覽器網址列收掉、整個螢幕拿來玩(2026-09-07)
+              ・v16 🏷 右下角版號徽章:顯示這台裝置實際執行中的版本(2026-08-31)
+              ・v15 📡 接上匿名使用統計(只數「開了幾次、停留多久」,零個資)(2026-08-15)
+              ・v14 ☄️ <b>雙皮膚</b>——開戰前可選「✈️ 機械戰機(原版)/ ☄️ 隕石風暴」,純視覺換皮,玩法、排行、錄影全共用(2026-07-10)
+              ・v13 👑 <b>Boss Rush</b>(連戰 5 隻 Boss、計時排行)+ 錄影改 5 槽、附縮圖(2026-05-08)
+              ・v12 🎨 像素風機體與敵機、8-bit 配樂每關不同調式、冰凍/燃燒/感電子彈(商店買)、打成就解鎖新機體 Phantom / Tempest、今日挑戰獨立排行(2026-05-08)
+              ・v11 📱 手機選單修正;更新改「先抓網路」,改版後不再卡在舊版(2026-05-08)
+              ・v10 ⚡ Boss 出招前有紅色預告線、過關結算獎勵、金幣 Continue 復活、低血量慢動作、4 個武器槽切換、火力 1~20 格(2026-05-08)
+              ・v9 內部調整,沒有留下單獨紀錄(2026-05 初)
+              ・v8 📱 手機在選單與輸入名字時改成整頁面板(2026-05-02)
+              ・v7 🚀 首發:垂直捲軸射擊 PWA——Boss、連擊、副武器(散彈/雷射/追蹤)、僚機、商店、成就、雙人協力、Replay(2026-05-01)
+            </p>
+          </details>
+        </div>
+
 
         <div class="stats-grid">
           <article class="stat-card"><span>分數</span><strong id="scoreValue">0</strong></article>
@@ -75,103 +198,6 @@
             <button class="lb-tab" data-lb="rush" type="button">Boss Rush</button>
           </div>
           <ol id="leaderboardList" class="leaderboard-list"></ol>
-        </div>
-
-        <div id="messageCard" class="message-card menu-card">
-          <p class="message-tag" id="messageTag">READY</p>
-          <h2 id="messageTitle">10 條命，10 顆炸彈，直接升空</h2>
-          <p id="messageBody">擊碎隕石掉落寶物與武器，每 5 wave 出現巨型隕石 Boss。</p>
-
-          <div class="tabs" id="menuTabs">
-            <button data-tab="play" class="tab-button is-active">出擊</button>
-            <button data-tab="select" class="tab-button">機體</button>
-            <button data-tab="shop" class="tab-button">商店</button>
-            <button data-tab="ach" class="tab-button">成就</button>
-            <button data-tab="replay" class="tab-button">紀錄</button>
-          </div>
-
-          <section data-pane="play" class="tab-pane is-active">
-            <label class="row-toggle">
-              <input id="coopToggle" type="checkbox" />
-              雙人協力（P2：WASD 移動，Q 炸彈）
-            </label>
-            <label class="row-toggle">
-              <input id="dailyToggle" type="checkbox" />
-              今日挑戰（固定種子）
-            </label>
-            <label class="row-toggle">
-              <input id="bossRushToggle" type="checkbox" />
-              Boss Rush（連戰 5 隻 Boss、計時排行）
-            </label>
-            <label class="row-toggle">
-              <input id="recordToggle" type="checkbox" />
-              錄影模式
-            </label>
-            <label class="row-toggle">
-              戰場
-              <select id="skinSelect" class="difficulty-select">
-                <option value="mech" selected>✈️ 機械戰機（原版）</option>
-                <option value="rock">☄️ 隕石風暴</option>
-              </select>
-            </label>
-            <label class="row-toggle">
-              難度
-              <select id="difficultySelect" class="difficulty-select">
-                <option value="easy">簡單</option>
-                <option value="normal" selected>普通</option>
-                <option value="hard">硬派</option>
-                <option value="storm">彈幕</option>
-              </select>
-            </label>
-            <button id="startButton" class="primary-button">開始戰鬥</button>
-            <p class="hint">控制：方向鍵 / 滑鼠移動、Shift 聚焦慢速、Space 炸彈、P 暫停</p>
-          </section>
-
-          <section data-pane="select" class="tab-pane">
-            <div id="characterGrid" class="card-grid"></div>
-          </section>
-
-          <section data-pane="shop" class="tab-pane">
-            <p class="shop-currency">擁有金幣 <strong id="shopCredits">0</strong></p>
-            <div id="shopGrid" class="card-grid"></div>
-          </section>
-
-          <section data-pane="ach" class="tab-pane">
-            <div id="achList" class="ach-list"></div>
-          </section>
-
-          <section data-pane="replay" class="tab-pane">
-            <p class="hint">最多保留 5 場錄影，可點選縮圖重播 / 匯出。</p>
-            <div id="replaySlots" class="replay-slots"></div>
-            <div class="row-buttons">
-              <button id="replayButton" class="primary-button">重播上一場</button>
-              <button id="exportReplayButton" class="sound-button">匯出選定</button>
-            </div>
-            <textarea id="replayImport" placeholder="貼上錄影 JSON 後按匯入" rows="3"></textarea>
-            <button id="importReplayButton" class="sound-button">匯入並重播</button>
-          </section>
-
-          <!-- 🏷 版本號 + 改版簡歷(艦隊鐵則⑦「版本兩件套」;2026-09-15 使用者:「版本號與簡歷打不開」——
-               以前只有右下角一顆 10 秒就淡出、也點不了的徽章,沒有簡歷)。白話寫給家長/老師,本版在最前、最舊在最後。
-               ★ 改版四處一起改:sw.js CACHE_NAME / 這裡 summary 的 vN / verTag 第一行 vN + 日期 / 前幾版接上一版(scripts/check-vertag.mjs 在守)。 -->
-          <details class="ver-fold" id="verFold">
-            <summary>版本 v19(2026-09-15)・看看前幾版做了什麼</summary>
-            <p id="verTag" class="ver-tag">
-              版本 v19(2026-09-15)・🏷 <b>版本號與改版簡歷看得到、點得開了</b>——選單最底多了這一段;右下角那顆版號徽章以前 10 秒就消失、也點不了,現在點一下就展開這份簡歷。<br>
-              前幾版:v18 🩹 <b>修好「裝成 App 打開就無法連上」的隱藏地雷</b>——網站主機會把 index.html 這個網址自動轉到首頁,而離線快取名單裡偏偏列著 index.html,存到的是被轉址過的一份,從主畫面開 App 時瀏覽器拒收;現在名單只認首頁、一個檔一個檔存(2026-09-14)
-              ・v17 ⛶ <b>手機放大鈕</b>——右上角一顆,把瀏覽器網址列收掉、整個螢幕拿來玩(2026-09-07)
-              ・v16 🏷 右下角版號徽章:顯示這台裝置實際執行中的版本(2026-08-31)
-              ・v15 📡 接上匿名使用統計(只數「開了幾次、停留多久」,零個資)(2026-08-15)
-              ・v14 ☄️ <b>雙皮膚</b>——開戰前可選「✈️ 機械戰機(原版)/ ☄️ 隕石風暴」,純視覺換皮,玩法、排行、錄影全共用(2026-07-10)
-              ・v13 👑 <b>Boss Rush</b>(連戰 5 隻 Boss、計時排行)+ 錄影改 5 槽、附縮圖(2026-05-08)
-              ・v12 🎨 像素風機體與敵機、8-bit 配樂每關不同調式、冰凍/燃燒/感電子彈(商店買)、打成就解鎖新機體 Phantom / Tempest、今日挑戰獨立排行(2026-05-08)
-              ・v11 📱 手機選單修正;更新改「先抓網路」,改版後不再卡在舊版(2026-05-08)
-              ・v10 ⚡ Boss 出招前有紅色預告線、過關結算獎勵、金幣 Continue 復活、低血量慢動作、4 個武器槽切換、火力 1~20 格(2026-05-08)
-              ・v9 內部調整,沒有留下單獨紀錄(2026-05 初)
-              ・v8 📱 手機在選單與輸入名字時改成整頁面板(2026-05-02)
-              ・v7 🚀 首發:垂直捲軸射擊 PWA——Boss、連擊、副武器(散彈/雷射/追蹤)、僚機、商店、成就、雙人協力、Replay(2026-05-01)
-            </p>
-          </details>
         </div>
 
         <button id="installButton" class="install-button" hidden>安裝到裝置</button>
@@ -227,11 +253,29 @@
 
           <button id="bombButton" class="bomb-button" type="button" aria-label="使用炸彈">BOMB</button>
           <button id="focusButton" class="focus-button" type="button" aria-label="聚焦慢速">FOCUS</button>
+          <button id="skillButton" class="skill-button" type="button" aria-label="特殊技" hidden><span id="skillIcon">✨</span><small id="skillCd">SKILL</small></button>
           <button id="pauseButton" class="pause-button" type="button" aria-label="暫停">II</button>
         </div>
       </main>
     </div>
 
+    <!-- 📖 第一次玩教學卡(v20,B):第一次按「開始戰鬥」先跳這張、遊戲凍住,按出擊才開打;之後可從出擊分頁「操作教學」再看。
+         手機/電腦各給各的說法(.tut-touch / .tut-desk 靠 pointer media query 只顯示一種)。 -->
+    <div id="tutorialOverlay" class="tutorial-modal" hidden>
+      <div class="tutorial-card" role="dialog" aria-labelledby="tutorialTitle">
+        <p class="overlay-tag">HOW TO PLAY</p>
+        <h2 id="tutorialTitle">第一次出擊?30 秒學會</h2>
+        <div class="tutorial-grid">
+          <div class="tut-tile"><div class="tut-icon">🕹️</div><b>移動</b><small class="tut-touch">手指按住畫面拖曳,飛機跟著手指走</small><small class="tut-desk">滑鼠移動,或方向鍵</small></div>
+          <div class="tut-tile"><div class="tut-icon tut-focus">FOCUS</div><b>聚焦慢速</b><small class="tut-touch">按住藍色 FOCUS 鈕</small><small class="tut-desk">按住 Shift</small><small>慢速精準閃彈,吸寶物範圍也變大</small></div>
+          <div class="tut-tile"><div class="tut-icon tut-bomb">BOMB</div><b>炸彈</b><small class="tut-touch">按紅色 BOMB 鈕</small><small class="tut-desk">按 Space</small><small>清空畫面上的敵彈、重傷 Boss;結算時剩一顆 +500 分</small></div>
+          <div class="tut-tile"><div class="tut-icon">🔫</div><b>切換武器</b><small class="tut-touch">點畫面左下的武器格</small><small class="tut-desk">Tab 或 X</small><small>打倒敵人會掉散彈 / 雷射 / 追蹤</small></div>
+          <div class="tut-tile"><div class="tut-icon">✨</div><b>特殊技</b><small class="tut-touch">按紫色 SKILL 鈕</small><small class="tut-desk">按 C</small><small>每台機體不同(時間減速 / 彈幕反彈 / 蓄力大砲),用完要冷卻</small></div>
+          <div class="tut-tile"><div class="tut-icon">🛡️</div><b>開局 5 秒無敵</b><small>先熟悉操作再開打。一波都沒被打到,下一波分數 ×2;每關第 5 波中 Boss、第 10 波 STAGE BOSS。</small></div>
+        </div>
+        <button id="tutorialGo" class="primary-button" type="button">知道了,出擊!</button>
+      </div>
+    </div>
     <script defer src="app.js"></script>
   <script>
   // play-stats 三層匿名計數(skill play-stats-lite / play-stats-dwell)。

@@ -57,7 +57,7 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - **xlsx-style：只改 .js / .css / .html，本機檔案 = 雲端真理**（無 build step）
 - **沒有框架**：不要引入 React/Vue/Vite。所有 DOM 操作用 `document.getElementById($())`，CSS 修改用 className
 - **不寫測試**：靠手動測 + console
-- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v19）讓舊 cache 失效
+- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v20）讓舊 cache 失效
 - **🏷 版本兩件套(2026-09-15,v19;使用者「版本號與簡歷打不開」)**:選單最底 `<details id="verFold">`(summary 寫本版 vN + 日期,`#verTag` 白話簡歷、前幾版接到 v7)+ 右下角 `#appVerBadge` 可點(點了展開簡歷並捲到它;戰鬥中選單收起就先提示)。**改版四處一起改**:`sw.js` CACHE_NAME / summary vN / verTag 第一行 vN+日期 / 前幾版接上一版 —— `node scripts/check-vertag.mjs` 在守(本 repo 唯一的自動檢查,零依賴)。
 - **手機版選單**：`@media (max-width: 980px)` 時 `body[data-scene="menu"] .canvas-wrap { display: none }`，因為 `.hud-panel` 的 `backdrop-filter: blur` 會建立 fixed-positioning containing block，導致 `position:fixed` modal 被綁住。所以我們改成「選單時直接隱藏 canvas」而非 modal overlay
 - **deltaTime 在 slow-mo 時降到 0.65×**，但 audio / parallax 用真實 delta 不縮放
@@ -122,11 +122,24 @@ A 級已完成（全部 #8–#14）：
 - **Boss Rush 模式**：勾選 toggle 後，連戰 5 隻 boss 計時排行；`state.bossRush + bossRushIdx + bossRushTime`，無小怪 spawn，`tf-bossrush-leaderboard-v1` 排行（依 time 升序）
 - **Replay 多筆儲存（5 槽）+ 縮圖**：`tf-replays-v1` 存 ring buffer，每場結束 `makeReplayThumbnail()` 用 `canvas.toDataURL` 抽 96×160 jpeg；UI 顯示縮圖 grid，第一次點選 = 選中，第二次點選 = 重播
 
-B 級（1–3 天，皆未做）：
-- #15 腳本化關卡（intro wave → 中 boss → 編隊 → 主 boss 的時間軸）
-- #16 角色特殊技（Time slow / Auto-deflect / 蓄力大砲 — 按鍵觸發 + 冷卻）
-- #17 Mid-boss（每 stage 第 5 wave）
+B 級：#15 / #16 / #17 **已於 v20（2026-09-15）完成**，見下方「v20 九件」；仍未做：
 - #18 協力 P2 獨立 HP / Lives / Bombs + 復活機制
+
+## v20 九件（2026-09-15，使用者拍板 A/B/C/D/E/F/G/M/N 一次做完）
+
+| 代號 | 做了什麼 | 程式位置 |
+|---|---|---|
+| A 開始鈕第一屏 | `#messageCard` 搬到 `.brand` 底下、出擊分頁「開始戰鬥」放最前；`body.fresh`（還沒玩過）時選單態隱藏全 0 的 `.stats-grid`，`startNewGame` 拿掉 fresh | index.html / styles.css 檔尾 / app.js init |
+| B 教學卡 + 開局無敵 | `#tutorialOverlay`（fixed，選單態也能從「操作教學」鈕開）；第一次按開始 `openTutorial(true)` 凍住遊戲（`state.tutorialOpen`，update() 早退、grace 不倒數），按出擊 `closeTutorial()` 才開打並寫 `tf-tutorial-seen`；`p.grace = START_GRACE`（5s）期間 `damagePlayer` 直接 return，畫虛線圈 + 倒數 | app.js openTutorial/closeTutorial/createPlayer/drawPlayers |
+| C 打點 | `flyshoot-done`（endGame，玩 ≥20s、非重播）、`flyshoot-boss`（本場第一次擊破 Boss 含中 Boss） | endGame / bossDefeated |
+| D 桌機 ⛶ + 畫布比例 | `#mfsDesktopStyle` 讓 pointer:fine 也顯示 mfs 放大鈕；`body.immersive`/`.mfs-fs` 在 play/paused 收掉 `.hud-panel`、畫布 `height:100svh`；★ 順手修正桌機畫布：原本 `width:520px + max-height` 被夾成 520×744（fitCanvas 兩軸各自縮放 ⇒ 橫向拉寬 16%），改成「高度決定、寬度跟 3:5」 | index.html head / styles.css 檔尾 |
+| E 炸彈換分 | endGame 時 `bombCashout = bombs × BOMB_CASHOUT(500)` 加進分數（Boss Rush 計時榜與重播不算），結算文字與 `buildRunStats` 都有 | endGame |
+| F 無傷加倍 | `state.waveHits`（damagePlayer 就 +1，護盾擋下也算）；`advanceWave` 開頭：上一波 0 hit ⇒ `flawlessMult = FLAWLESS_MULT(2)`，否則 1；destroyEnemy / 編隊全滅 / bossDefeated 的分數都乘它；HUD 右下印「★ 無傷加倍 ×2」 | advanceWave / destroyEnemy / drawCanvasHud |
+| G 音量三檔 | audio 多 `sfxGain`（tone/noise 接它，BGM 接 `bgmGain`），`VOL_LEVELS=[0,.35,.7,1]`，`setVolume(kind,lv)`，`tf-vol-bgm`/`tf-vol-sfx`；出擊分頁兩個 select；「音效 ON/OFF」鈕仍是 master 總開關 | createAudio / registerInput |
+| M 中 Boss + 腳本化波次 | `STAGE_SCRIPT[1..10]`（label/spawnMul/formationEvery/eliteMul）由 `stageScript()` 依 `waveInStage()` 取；第 5 波 `startBossWarning(null,{mid:true})` ⇒ `spawnBoss(type, mid)`：型別 = 下一關 STAGE BOSS（(stage-1+1)%5）、血 ×`MID_BOSS_HP_MUL`(0.42)、radius 44、只有 2 phase 不 ENRAGED、獎勵 ×0.4、**不算 meta.bossKills / Boss 成就**（`state.midBossKillsRun` 另計）；第 10 波仍是原本的 STAGE BOSS | spawnEnemy 上方 / startBossWarning / spawnBoss / bossUpdate / bossDefeated |
+| N 機體特殊技 | `SKILLS = { slow, deflect, charge }`，CHARACTERS 各帶 `skill`（alpha/phantom=slow、blade=deflect、fortress/tempest=charge；phantom cd16 dur4、tempest cd11）；P1 按 **C**、P2 按 **R**、手機 `#skillButton`、手把 A 鈕；`useSkill` → slow 設 `state.timeWarp={t,factor:.35}`（update() 敵方那一側吃 warpDelta：updateEnemies/updateBoss/updateTelegraphs/updateDeferred/敵彈/敵方光束）、deflect 護罩期間 handleCollisions 把貼身敵彈轉成己方子彈、charge 蓄力 0.5s 後 `fireChargeCannon` 推一道 width 96 的 fromPlayer 光束；`syncSkillHud` 更新 DOM 鈕（READY / ON / Ns），canvas HUD 左下也印 | SKILLS / useSkill / fireChargeCannon / updatePlayers / handleCollisions |
+
+驗收：`node scripts/check-vertag.mjs`（版號四處）+ 本機/線上 Playwright 行為驗收 37 項（腳本在 skills 交接快照 `shoot-v20-test.mjs`；含：第一屏、比例 3:5、教學凍住/無敵不倒數、減速中敵彈 0.5s 只走 35px、中 Boss 血 126 vs 300、無傷 ×2、炸彈 3 顆 +1500、兩個打點、音量、沉浸 800/800、護罩轉彈、大砲 144 傷害）。
 
 ## localStorage key 一覽
 

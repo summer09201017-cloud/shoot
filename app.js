@@ -40,6 +40,9 @@ const els = {
   importReplayBtn: $("importReplayButton"), replayImport: $("replayImport"),
   replaySlots: $("replaySlots"),
   tabs: $("menuTabs"),
+  skillBtn: $("skillButton"), skillIcon: $("skillIcon"), skillCd: $("skillCd"),
+  tutorialOverlay: $("tutorialOverlay"), tutorialGo: $("tutorialGo"), tutorialBtn: $("tutorialButton"),
+  bgmVolume: $("bgmVolume"), sfxVolume: $("sfxVolume"),
 };
 
 // =====================================================================
@@ -69,6 +72,12 @@ const STAGE_CLEAR_DURATION = 2.6;
 const CONTINUE_TIME_LIMIT = 15;
 const CONTINUE_COSTS = [100, 250];
 const MAX_CONTINUES = 2;
+// ===== v20(2026-09-15)使用者拍板九件 =====
+const START_GRACE = 5;        // B 開局 5 秒無敵(先熟悉操作再開打)
+const BOMB_CASHOUT = 500;     // E 結算時剩餘炸彈每顆 +500(鼓勵留炸彈、不亂炸)
+const FLAWLESS_MULT = 2;      // F 一波不受傷 ⇒ 下一波分數 ×2
+const MID_BOSS_WAVE = 5;      // M 每 stage 第 5 波中 Boss(第 10 波仍是 STAGE BOSS)
+const MID_BOSS_HP_MUL = 0.42; // 中 Boss 血量倍率(只有兩個 phase、不會 ENRAGED)
 
 const DIFFICULTIES = {
   easy: {
@@ -119,6 +128,11 @@ const STORAGE = {
   replays: "tf-replays-v1",     // new ring-buffer of up to 5 entries
   skin: "tf-skin",              // 戰場皮膚:mech(機械戰機,原版)/ rock(隕石風暴)
 };
+Object.assign(STORAGE, {
+  tutorialSeen: "tf-tutorial-seen", // B 第一次玩教學看過了
+  volBgm: "tf-vol-bgm",             // G 音樂 0~3
+  volSfx: "tf-vol-sfx",             // G 音效 0~3
+});
 const MAX_REPLAY_SLOTS = 5;
 
 // 雙皮膚(2026-07-10):開戰前選單可選;純視覺換皮,機制/判定/排行/Replay 全共用
@@ -186,18 +200,28 @@ const saveJSON = (k, v) => safeSet(k, JSON.stringify(v));
 
 const CHARACTERS = [
   { id: "alpha",    name: "Alpha 標準",   desc: "平衡型，火力均衡。",
-    hp: 10, lives: 10, bombs: 10, fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0 },
+    hp: 10, lives: 10, bombs: 10, fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0, skill: "slow" },
   { id: "blade",    name: "Blade 速攻",   desc: "速度與射速優異，但 HP 低。",
-    hp: 7,  lives: 10, bombs: 8,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0 },
+    hp: 7,  lives: 10, bombs: 8,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0, skill: "deflect" },
   { id: "fortress", name: "Fortress 重裝", desc: "高 HP、雙倍傷害、自帶護盾，但較慢。",
-    hp: 16, lives: 10, bombs: 12, fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6 },
+    hp: 16, lives: 10, bombs: 12, fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6, skill: "charge" },
   { id: "phantom",  name: "Phantom 幻影", desc: "聚焦再 -25% 速度，僚機 +1。需擊破 5 隻 Boss 解鎖。",
     hp: 9,  lives: 10, bombs: 10, fireRate: 0.20, speed: 300, dmg: 1, color: "#d7a6ff", startShield: 2,
-    perk: "phantom", lockedBy: "boss-5" },
+    perk: "phantom", lockedBy: "boss-5", skill: "slow", skillCd: 16, skillDur: 4 },
   { id: "tempest",  name: "Tempest 風暴", desc: "射速 ×1.4、HP 低。需 100 連擊解鎖。",
     hp: 6,  lives: 10, bombs: 8,  fireRate: 0.13, speed: 340, dmg: 1, color: "#ff5d8f", startShield: 0,
-    perk: "tempest", lockedBy: "combo-100" },
+    perk: "tempest", lockedBy: "combo-100", skill: "charge", skillCd: 11 },
 ];
+
+// ✨ 機體特殊技(N,CLAUDE.md B 級 #16):按 C(P2 按 R)或畫面上的 SKILL 鈕,有冷卻。三種:
+//   slow    時間減速 —— 敵機/敵彈/Boss 那一側吃 0.35× 的 delta,玩家與己方子彈照常(update() 的 warpDelta)
+//   deflect 彈幕反彈 —— 護罩持續期間碰到的敵彈變成己方子彈往上飛(handleCollisions)
+//   charge  蓄力大砲 —— 蓄力 0.5s 後從機頭轟出一道 96px 寬、貫穿全場的光束(fireChargeCannon)
+const SKILLS = {
+  slow:    { name: "時間減速", icon: "⏳", desc: "3 秒內敵機與敵彈都慢到三分之一,你照常", cd: 20, dur: 3.0 },
+  deflect: { name: "彈幕反彈", icon: "🛡", desc: "2.5 秒反彈護罩:碰到的敵彈變成你的子彈", cd: 18, dur: 2.5 },
+  charge:  { name: "蓄力大砲", icon: "💥", desc: "蓄力半秒後轟出一道貫穿全場的巨砲", cd: 14, dur: 0.5 },
+};
 
 function isCharacterUnlocked(c) {
   if (!c.lockedBy) return true;
@@ -271,8 +295,13 @@ function unlockAch(id) {
 const audio = createAudio();
 
 function createAudio() {
-  let context = null, master = null, bgmGain = null;
+  let context = null, master = null, bgmGain = null, sfxGain = null;
   let muted = safeGet(STORAGE.muted) === "1";
+  // G 音量三檔(關/小/中/大),音樂與音效分開、記在 localStorage;master 仍由「音效 ON/OFF」鈕總開關
+  const VOL_LEVELS = [0, 0.35, 0.7, 1];
+  const readLv = (k, d) => { const v = parseInt(safeGet(k) || "", 10); return v >= 0 && v <= 3 ? v : d; };
+  let volBgm = readLv(STORAGE.volBgm, 2);
+  let volSfx = readLv(STORAGE.volSfx, 2);
   let lastShot = 0;
   let bgmTimer = null;
 
@@ -288,8 +317,11 @@ function createAudio() {
     master.gain.value = muted ? 0 : 0.18;
     master.connect(context.destination);
     bgmGain = context.createGain();
-    bgmGain.gain.value = 0.5;
+    bgmGain.gain.value = 0.5 * VOL_LEVELS[volBgm];
     bgmGain.connect(master);
+    sfxGain = context.createGain();
+    sfxGain.gain.value = VOL_LEVELS[volSfx];
+    sfxGain.connect(master);
   }
 
   function tone(freq, dur, type = "square", gain = 0.35, slide = 1) {
@@ -304,7 +336,7 @@ function createAudio() {
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(gain, now + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    o.connect(g); g.connect(master);
+    o.connect(g); g.connect(sfxGain || master);
     o.start(now); o.stop(now + dur + 0.02);
   }
 
@@ -321,7 +353,7 @@ function createAudio() {
     src.buffer = buf;
     f.type = "lowpass"; f.frequency.value = 1200;
     g.gain.value = gain;
-    src.connect(f); f.connect(g); g.connect(master);
+    src.connect(f); f.connect(g); g.connect(sfxGain || master);
     src.start();
   }
 
@@ -453,6 +485,13 @@ function createAudio() {
       if (!muted) tone(520, 0.08, "sine", 0.22, 1.4);
     },
     startBgm, stopBgm, setBgmStage,
+    get volBgm() { return volBgm; },
+    get volSfx() { return volSfx; },
+    setVolume(kind, lv) {
+      lv = clamp(parseInt(lv, 10) || 0, 0, 3);
+      if (kind === "bgm") { volBgm = lv; safeSet(STORAGE.volBgm, String(lv)); if (bgmGain) bgmGain.gain.value = 0.5 * VOL_LEVELS[lv]; }
+      else { volSfx = lv; safeSet(STORAGE.volSfx, String(lv)); if (sfxGain) sfxGain.gain.value = VOL_LEVELS[lv]; tone(660, 0.07, "sine", 0.22, 1.4); }
+    },
     shoot() {
       const now = performance.now();
       if (now - lastShot < 90) return;
@@ -991,6 +1030,14 @@ const state = {
   continueOverlay: null,
   continuesUsed: 0,
   slowMoActive: false,
+  // v20
+  timeWarp: null,        // N 時間減速 { t, factor }
+  waveHits: 0,           // F 這一波被打幾次
+  flawlessMult: 1,       // F 本波分數倍率(上一波無傷 ⇒ 2)
+  flawlessWaves: 0,      // F 本場無傷波數
+  bombCashout: 0,        // E 結算炸彈換分
+  midBossKillsRun: 0,    // M 本場中 Boss 擊破數
+  tutorialOpen: false,   // B 教學卡開著 ⇒ 遊戲暫停
 };
 
 let lastTimestamp = 0;
@@ -1104,6 +1151,11 @@ function createPlayer(idx) {
     weaponSlots: { default: true, spread: false, laser: false, homing: false },
     shield: meta.shop.shield * 3 + (c.startShield || 0),
     invincible: 0,
+    grace: START_GRACE,                       // B 開局無敵秒數(教學卡開著時不倒數)
+    skill: c.skill || "slow", skillCd: 0, skillActive: 0, skillCharging: 0,
+    skillCdMax: c.skillCd || SKILLS[c.skill || "slow"].cd,
+    skillDur: c.skillDur || SKILLS[c.skill || "slow"].dur,
+    _cdShown: -1, _activeShown: false,
     fireCooldown: 0,
     fireRate: c.fireRate * (1 - meta.shop.fire * 0.08),
     dmgBonus: c.dmg,
@@ -1308,9 +1360,27 @@ function hitstop(duration) {
 //  Spawning
 // =====================================================================
 
+// M 腳本化波次時間軸(CLAUDE.md B 級 #15):每 stage 十波各有節奏,不再從頭到尾同一種亂數灑兵。
+//   spawnMul 散兵密度倍率(0 = 這波不灑散兵,Boss 波)、formationEvery 編隊間隔秒數區間、eliteMul 精英機率倍率、label 開波時印在畫面上。
+const STAGE_SCRIPT = [
+  null,
+  { label: "前哨",     spawnMul: 0.75, formationEvery: [16, 24], eliteMul: 0.5 },
+  { label: "偵察隊",   spawnMul: 0.9,  formationEvery: [12, 18], eliteMul: 0.7 },
+  { label: "編隊來襲", spawnMul: 0.7,  formationEvery: [6, 9],   eliteMul: 0.8 },
+  { label: "精英突擊", spawnMul: 1.1,  formationEvery: [14, 20], eliteMul: 1.8 },
+  { label: "中 BOSS",  spawnMul: 0,    formationEvery: null,     eliteMul: 1 },
+  { label: "殘兵",     spawnMul: 0.8,  formationEvery: [14, 22], eliteMul: 0.6 },
+  { label: "雙編隊",   spawnMul: 0.8,  formationEvery: [5, 8],   eliteMul: 1.0 },
+  { label: "彈幕群",   spawnMul: 1.3,  formationEvery: [12, 16], eliteMul: 1.2 },
+  { label: "決戰前夕", spawnMul: 1.2,  formationEvery: [7, 10],  eliteMul: 1.6 },
+  { label: "STAGE BOSS", spawnMul: 0,  formationEvery: null,     eliteMul: 1 },
+];
+function waveInStage() { return (state.wave - 1) % STAGE_WAVES + 1; }
+function stageScript() { return STAGE_SCRIPT[waveInStage()] || STAGE_SCRIPT[1]; }
+
 function spawnEnemy(opts = {}) {
   const stage = state.stage;
-  const eliteChance = Math.min(0.08 + state.wave * 0.012, 0.32);
+  const eliteChance = Math.min(0.08 + state.wave * 0.012, 0.32) * (stageScript().eliteMul || 1);
   const elite = opts.elite ?? Math.random() < eliteChance;
   const zigzag = opts.zigzag ?? Math.random() < 0.34;
   const boost = stage * 0.5;
@@ -1334,7 +1404,8 @@ function spawnEnemy(opts = {}) {
 }
 
 function spawnFormation() {
-  state.formationTimer = random(14, 24) / enemyRate();
+  const fe = stageScript().formationEvery || [14, 24];
+  state.formationTimer = random(fe[0], fe[1]) / enemyRate();
   const id = `f${Date.now()}-${randInt(0, 999)}`;
   const kind = randInt(0, 2);
   const baseCount = kind === 0 ? 6 : kind === 1 ? 5 : 7;
@@ -1404,37 +1475,42 @@ const BOSS_TYPES = [
   { id: "phoenix",   name: "STAGE BOSS：不死鳥",    rockName: "STAGE BOSS：烈焰彗核", color: "#ff5d5d" },
 ];
 
-function startBossWarning(forcedTypeId) {
+function startBossWarning(forcedTypeId, opts) {
+  const mid = !!(opts && opts.mid); // M 中 Boss:預告短一點、震動小一點
   state.bossPending = true;
   state.bossWarning = {
-    timer: 2.6,
-    total: 2.6,
+    timer: mid ? 1.8 : 2.6,
+    total: mid ? 1.8 : 2.6,
     wave: state.wave,
     forcedType: forcedTypeId || null,
+    mid,
   };
   audio.bossArrive();
   spawnFloatingText(WORLD.width / 2, 96, "WARNING", "#ff6d6d", 34);
-  spawnFloatingText(WORLD.width / 2, 134, "BOSS APPROACHING", "#ffd86c", 18);
-  shake(10, 0.5);
+  spawnFloatingText(WORLD.width / 2, 134, mid ? "MID-BOSS APPROACHING" : "BOSS APPROACHING", "#ffd86c", 18);
+  shake(mid ? 6 : 10, 0.5);
 }
 
-function spawnBoss(forcedTypeId) {
-  let type = BOSS_TYPES[(state.stage - 1) % BOSS_TYPES.length];
+function spawnBoss(forcedTypeId, mid = false) {
+  // 中 Boss = 下一關 STAGE BOSS 的弱化預告版(血 42%、只有兩個 phase、體型 44);STAGE BOSS 型別維持原本 (stage-1)%5
+  let type = BOSS_TYPES[((state.stage - 1) + (mid ? 1 : 0)) % BOSS_TYPES.length];
   if (forcedTypeId) {
     const found = BOSS_TYPES.find((t) => t.id === forcedTypeId);
     if (found) type = found;
   }
   const tier = Math.floor((state.wave - 1) / BOSS_WAVE_INTERVAL);
   const hpBase = state.bossRush ? 380 + state.bossRushIdx * 80 : 220 + tier * 140 + state.stage * 80;
-  const hp = scaledBossHp(hpBase);
+  const hp = scaledBossHp(mid ? Math.round(hpBase * MID_BOSS_HP_MUL) : hpBase);
+  const rawName = getSkin() === "rock" ? (type.rockName || type.name) : type.name;
   state.boss = {
     type: type.id,
-    name: getSkin() === "rock" ? (type.rockName || type.name) : type.name,
+    name: mid ? rawName.replace("STAGE BOSS", "中 BOSS") : rawName,
+    mid,
     color: type.color,
     x: WORLD.width / 2,
     y: -120,
-    targetY: 130,
-    radius: 64,
+    targetY: mid ? 118 : 130,
+    radius: mid ? 44 : 64,
     hp, maxHp: hp,
     phase: 1,
     phaseTime: 0,
@@ -1459,7 +1535,7 @@ function bossUpdate(b, delta) {
   }
 
   const ratio = b.hp / b.maxHp;
-  const phase = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
+  const phase = b.mid ? (ratio > 0.5 ? 1 : 2) : (ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3);
   if (phase !== b.phase) {
     b.phase = phase;
     b.patternTimer = 0;
@@ -1962,7 +2038,7 @@ function useBomb() {
 
 function destroyEnemy(enemy, bombed = false) {
   const baseScore = enemy.value;
-  const earned = Math.round(baseScore * state.combo.multiplier);
+  const earned = Math.round(baseScore * state.combo.multiplier * state.flawlessMult);
   state.score += earned;
   bumpCombo();
   state.enemyKills += 1;
@@ -1979,7 +2055,7 @@ function destroyEnemy(enemy, bombed = false) {
     const sib = state.enemies.some((e) => e !== enemy && e.formation === enemy.formation);
     if (!sib) {
       const bonus = 500 + state.stage * 100;
-      state.score += Math.round(bonus * state.combo.multiplier);
+      state.score += Math.round(bonus * state.combo.multiplier * state.flawlessMult);
       spawnFloatingText(enemy.x, enemy.y - 30, `編隊全滅 +${bonus}`, "#ffd86c", 18);
       spawnLoot(enemy.x, enemy.y, { large: true });
     }
@@ -2002,22 +2078,26 @@ function damageBoss(b, dmg, x, y, fromBomb = false) {
 }
 
 function bossDefeated(b) {
-  const earn = Math.round((1500 + state.stage * 400) * state.combo.multiplier);
+  const earn = Math.round((1500 + state.stage * 400) * (b.mid ? 0.4 : 1) * state.combo.multiplier * state.flawlessMult);
   state.score += earn;
   spawnFloatingText(b.x, b.y, `BOSS +${earn}`, "#ffd86c", 26);
   for (let i = 0; i < 60; i++) spawnParticle(b.x + random(-30, 30), b.y + random(-30, 30), b.color);
   shake(20, 0.7); hitstop(0.18);
   audio.bossBoom();
 
-  for (let i = 0; i < 5; i++) spawnLoot(b.x + random(-30, 30), b.y, { large: true });
-  meta.credits += Math.round(200 * (1 + meta.shop.credit * 0.15));
-  meta.bossKills += 1;
+  for (let i = 0; i < (b.mid ? 2 : 5); i++) spawnLoot(b.x + random(-30, 30), b.y, { large: true });
+  meta.credits += Math.round((b.mid ? 80 : 200) * (1 + meta.shop.credit * 0.15));
+  if (b.mid) state.midBossKillsRun += 1; else meta.bossKills += 1; // 中 Boss 不算進 Boss 成就
   state.bossKillsRun += 1;
   saveMeta();
 
-  unlockAch("boss-1");
-  if (meta.bossKills >= 5) unlockAch("boss-5");
-  if (state.bossDamageTaken === 0) unlockAch("no-hit-boss");
+  if (!b.mid) {
+    unlockAch("boss-1");
+    if (meta.bossKills >= 5) unlockAch("boss-5");
+    if (state.bossDamageTaken === 0) unlockAch("no-hit-boss");
+  }
+  // C 打點:本場第一次打倒 Boss(含中 Boss)送一發 -boss,才知道有多少人真的打到 Boss
+  if (state.bossKillsRun === 1 && !state.replayPlaying && typeof window.psPing === "function") { try { window.psPing("flyshoot-boss"); } catch (_) {} }
 
   state.boss = null;
   state.bossPending = false;
@@ -2046,7 +2126,8 @@ function finishBossRush() {
 }
 
 function damagePlayer(p, amount) {
-  if (p.invincible > 0 || !state.running) return;
+  if (p.invincible > 0 || p.grace > 0 || !state.running) return;
+  state.waveHits += 1; // F 這一波被打到了(護盾擋下也算)
   let pending = amount;
   if (p.shield > 0) {
     const blocked = Math.min(p.shield, pending);
@@ -2209,6 +2290,9 @@ function pollGamepad() {
     } else { keys.delete("__bombHeld"); }
     if (pad.buttons[2] && pad.buttons[2].pressed) keys.add("ShiftLeft");
     else keys.delete("ShiftLeft");
+    if (pad.buttons[0] && pad.buttons[0].pressed) {
+      if (!keys.has("__skillHeld")) { keys.add("__skillHeld"); useSkill(state.players[0]); }
+    } else { keys.delete("__skillHeld"); }
     if (pad.buttons[9] && pad.buttons[9].pressed) {
       if (!keys.has("__pauseHeld")) { keys.add("__pauseHeld"); togglePause(); }
     } else { keys.delete("__pauseHeld"); }
@@ -2367,6 +2451,14 @@ function update(delta) {
     return;
   }
 
+  // B 教學卡開著:整場凍住(連開局無敵都不倒數),只讓背景動
+  if (state.tutorialOpen) {
+    updateStarsParallax(delta);
+    updateParticles(delta);
+    updateFloatingText(delta);
+    return;
+  }
+
   if (state.hitstop > 0) {
     state.hitstop -= delta;
     updateParticles(delta);
@@ -2390,16 +2482,19 @@ function update(delta) {
   state.slowMoActive = !!(p1 && p1.hp > 0 && p1.hp / p1.maxHp < LOW_HP_RATIO);
   const gameDelta = state.slowMoActive ? delta * LOW_HP_TIME_SCALE : delta;
 
+  // N ⏳ 時間減速:敵方那一側(敵機/敵彈/Boss/預告/Boss 排程)吃 warpDelta,玩家與己方子彈照常
+  if (state.timeWarp) { state.timeWarp.t -= delta; if (state.timeWarp.t <= 0) state.timeWarp = null; }
+  const warpDelta = state.timeWarp ? gameDelta * state.timeWarp.factor : gameDelta;
   pollGamepad();
   updateStarsParallax(delta); // ambient at real time
   updatePlayers(gameDelta);
-  updateBullets(gameDelta);
-  updateBeams(gameDelta);
-  updateEnemies(gameDelta);
-  updateBoss(gameDelta);
+  updateBullets(gameDelta, warpDelta);
+  updateBeams(gameDelta, warpDelta);
+  updateEnemies(warpDelta);
+  updateBoss(warpDelta);
   updateLoot(gameDelta);
-  updateTelegraphs(gameDelta);
-  updateDeferred(gameDelta);
+  updateTelegraphs(warpDelta);
+  updateDeferred(warpDelta);
   updateZaps(gameDelta);
   updateParticles(gameDelta);
   updateFloatingText(gameDelta);
@@ -2465,6 +2560,14 @@ function updatePlayers(delta) {
 
     p.fireCooldown -= delta;
     p.invincible -= delta;
+    if (p.grace > 0) p.grace -= delta;
+    if (p.skillCd > 0) p.skillCd -= delta;
+    if (p.skillActive > 0) p.skillActive -= delta;
+    if (p.skillCharging > 0) { p.skillCharging -= delta; if (p.skillCharging <= 0) fireChargeCannon(p); }
+    if (idx === 0) {
+      const cdNow = Math.ceil(Math.max(0, p.skillCd)), act = p.skillActive > 0;
+      if (cdNow !== p._cdShown || act !== p._activeShown) { p._cdShown = cdNow; p._activeShown = act; syncSkillHud(p); }
+    }
     p.wingmen.forEach((w) => { w.fireCooldown -= delta; });
     if (p.fireCooldown <= 0) {
       fireWeapon(p);
@@ -2482,7 +2585,7 @@ function updatePlayers(delta) {
   });
 }
 
-function updateBullets(delta) {
+function updateBullets(delta, enemyDelta = delta) {
   state.bullets = state.bullets.filter((b) => {
     if (b.homing && b.life > 0) {
       b.life -= delta;
@@ -2516,20 +2619,20 @@ function updateBullets(delta) {
   });
 
   state.enemyBullets = state.enemyBullets.filter((b) => {
-    b.x += b.vx * delta;
-    b.y += b.vy * delta;
+    b.x += b.vx * enemyDelta;
+    b.y += b.vy * enemyDelta;
     return b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30;
   });
 }
 
-function updateBeams(delta) {
+function updateBeams(delta, enemyDelta = delta) {
   state.beams = state.beams.filter((b) => {
-    b.age += delta;
+    b.age += b.fromPlayer ? delta : enemyDelta;
     if (b.fromPlayer) {
       const owner = state.players.find((p) => p.id === b.owner);
       if (owner) { b.x = owner.x; b.y = owner.y - 18; }
     } else {
-      b.angle += b.sweep * delta;
+      b.angle += b.sweep * enemyDelta;
     }
     return b.age < b.duration;
   });
@@ -2546,11 +2649,13 @@ function updateEnemies(delta) {
   } else {
     if (state.difficultyTimer >= 14) advanceWave();
     if (!state.boss && !state.bossPending) {
+      const sc = stageScript();
       if (state.spawnTimer <= 0) {
-        spawnEnemy();
-        state.spawnTimer = Math.max(0.24, (1.4 - state.wave * 0.07) / enemyRate());
+        if (sc.spawnMul > 0) spawnEnemy();
+        state.spawnTimer = Math.max(0.24, (1.4 - state.wave * 0.07) / enemyRate()) / (sc.spawnMul || 1);
       }
-      if (state.formationTimer <= 0) spawnFormation();
+      if (state.formationTimer <= 0 && sc.formationEvery) spawnFormation();
+      else if (state.formationTimer <= 0) state.formationTimer = 3;
     }
   }
 
@@ -2615,7 +2720,7 @@ function updateBoss(delta) {
   if (!state.boss) {
     if (state.bossPending && state.bossWarning) {
       state.bossWarning.timer -= delta;
-      if (state.bossWarning.timer <= 0) spawnBoss(state.bossWarning.forcedType);
+      if (state.bossWarning.timer <= 0) spawnBoss(state.bossWarning.forcedType, state.bossWarning.mid);
     }
     return;
   }
@@ -2676,6 +2781,15 @@ function updateFloatingText(delta) {
 }
 
 function advanceWave() {
+  // F 無傷加倍:上一波一次都沒被打到(連護盾擋下都算被打)⇒ 這一波分數 ×2
+  const cleanWave = state.waveHits === 0 && !state.bossRush;
+  state.waveHits = 0;
+  state.flawlessMult = cleanWave ? FLAWLESS_MULT : 1;
+  if (cleanWave) {
+    state.flawlessWaves += 1;
+    spawnFloatingText(WORLD.width / 2, WORLD.height / 2 - 140, `★ 無傷!下一波分數 ×${FLAWLESS_MULT}`, "#8cffbf", 22);
+    audio.combo(8);
+  }
   state.wave += 1;
   state.difficultyTimer = 0;
   const newStage = Math.floor((state.wave - 1) / STAGE_WAVES) + 1;
@@ -2688,9 +2802,14 @@ function advanceWave() {
   if (state.wave === 25) unlockAch("wave-25");
   if (state.wave === 11 && state.bombsThrownThisRun === 0) unlockAch("no-bomb-10");
 
-  if (state.wave % BOSS_WAVE_INTERVAL === 0 && state.lastBossWave !== state.wave) {
+  // M 第 5 波中 Boss、第 10 波 STAGE BOSS;其他波印這一波的腳本標籤
+  const wis = waveInStage();
+  if ((wis === MID_BOSS_WAVE || wis === STAGE_WAVES) && state.lastBossWave !== state.wave) {
     state.lastBossWave = state.wave;
-    startBossWarning();
+    startBossWarning(null, { mid: wis === MID_BOSS_WAVE });
+  } else {
+    const sc = stageScript();
+    if (sc && sc.label && sc.spawnMul > 0) spawnFloatingText(WORLD.width / 2, 200, `WAVE ${wis}・${sc.label}`, "#9afcff", 18);
   }
   syncHud();
 }
@@ -2827,6 +2946,12 @@ function handleCollisions() {
 
   state.enemyBullets = state.enemyBullets.filter((b) => {
     for (const p of state.players) {
+      // N 🛡 彈幕反彈:護罩期間碰到的敵彈變成己方子彈往上飛
+      if (p.skill === "deflect" && p.skillActive > 0 && distance(b, p) < b.radius + p.radius + 26) {
+        state.bullets.push({ x: b.x, y: b.y, radius: 5, vx: 0, vy: -540, damage: 2, color: "#8cffbf", spread: 0, owner: p.id });
+        spawnParticle(b.x, b.y, "#8cffbf");
+        return false;
+      }
       const hitRadius = p.focused ? p.hitRadius : p.radius + 4;
       if (distance(b, p) < b.radius + hitRadius) {
         damagePlayer(p, b.damage);
@@ -2874,6 +2999,7 @@ function render() {
   drawTexts();
   drawCanvasHud();
   drawSlowMoVignette();
+  drawTimeWarp();
   drawFlashes();
 
   ctx.restore();
@@ -2917,6 +3043,29 @@ function drawPlayers() {
     ctx.translate(p.x, p.y);
     if (p.invincible > 0) {
       ctx.globalAlpha = 0.5 + Math.sin(performance.now() / 70) * 0.25;
+    }
+    if (p.grace > 0) {
+      // B 開局無敵:虛線圈 + 倒數
+      ctx.strokeStyle = "rgba(154,252,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.arc(0, 0, p.radius + 16, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#9afcff";
+      ctx.font = 'bold 12px "Trebuchet MS", sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText(`無敵 ${Math.ceil(p.grace)}`, 0, -p.radius - 22);
+      ctx.textAlign = "start";
+    }
+    if (p.skill === "deflect" && p.skillActive > 0) {
+      ctx.strokeStyle = "rgba(140,255,191,0.9)";
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, p.radius + 26 + Math.sin(performance.now() / 60) * 2, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (p.skillCharging > 0) {
+      const k = 1 - clamp(p.skillCharging / (p.skillDur || 0.5), 0, 1);
+      ctx.fillStyle = `rgba(255,216,108,${0.25 + k * 0.5})`;
+      ctx.beginPath(); ctx.arc(0, -22, 6 + k * 22, 0, Math.PI * 2); ctx.fill();
     }
     if (p.shield > 0) {
       ctx.strokeStyle = "rgba(140,255,191,0.7)";
@@ -3251,6 +3400,20 @@ function drawCanvasHud() {
   ctx.fillText(`POWER ${p.power} / ${POWER_CAP}`, WORLD.width / 2, dotsY - 4);
   ctx.textAlign = "start";
 
+  // ✨ 特殊技狀態(左)與 ★ 無傷加倍(右)
+  ctx.font = 'bold 11px "Trebuchet MS", sans-serif';
+  if (p.skill) {
+    const sk = SKILLS[p.skill] || SKILLS.slow;
+    ctx.fillStyle = p.skillCd > 0 && !(p.skillActive > 0) ? "rgba(255,255,255,0.55)" : "#d7a6ff";
+    ctx.fillText(`${sk.icon} ${sk.name} ${p.skillActive > 0 ? "ON" : p.skillCd > 0 ? Math.ceil(p.skillCd) + "s" : "READY"}`, 24, WORLD.height - 66);
+  }
+  if (state.flawlessMult > 1) {
+    ctx.fillStyle = "#8cffbf";
+    ctx.textAlign = "right";
+    ctx.fillText(`★ 無傷加倍 ×${FLAWLESS_MULT}`, WORLD.width - 24, WORLD.height - 66);
+    ctx.textAlign = "start";
+  }
+
   // HP bar
   ctx.fillStyle = "rgba(255,255,255,0.15)";
   ctx.fillRect(22, WORLD.height - 60, WORLD.width - 44, 14);
@@ -3436,6 +3599,9 @@ function startNewGame(seedOverride) {
   state.continueOverlay = null;
   state.continuesUsed = 0;
   state.slowMoActive = false;
+  state.timeWarp = null; state.waveHits = 0; state.flawlessMult = 1; state.flawlessWaves = 0;
+  state.bombCashout = 0; state.midBossKillsRun = 0; state.tutorialOpen = false;
+  document.body.classList.remove("fresh"); // A 玩過一場之後統計卡才有意義,選單態才顯示
   if (els.stageClearOverlay) els.stageClearOverlay.hidden = true;
   if (els.continueOverlay) els.continueOverlay.hidden = true;
   state.shake = { intensity: 0, time: 0 };
@@ -3473,6 +3639,10 @@ function startNewGame(seedOverride) {
     pushDeferred(0.4, () => startBossWarning(BOSS_RUSH_TYPES[0]));
   }
   syncHud();
+  syncSkillHud(state.players[0]);
+  // B 第一次玩:先開教學卡(遊戲凍住),按「出擊」才開打;看過的直接提示開局無敵
+  if (!state.replayPlaying && safeGet(STORAGE.tutorialSeen) !== "1") openTutorial(true);
+  else spawnFloatingText(WORLD.width / 2, WORLD.height / 2 + 40, `開局 ${START_GRACE} 秒無敵`, "#8cffbf", 18);
 }
 
 function endGame() {
@@ -3484,6 +3654,17 @@ function endGame() {
   if (els.continueOverlay) els.continueOverlay.hidden = true;
   setScene("menu");
   audio.stopBgm();
+
+  // E 💣 炸彈換分:結算時剩餘每顆 +500(Boss Rush 是計時榜、重播不算)
+  state.bombCashout = 0;
+  const p0 = state.players[0];
+  if (p0 && p0.bombs > 0 && !state.bossRush && !state.replayPlaying) {
+    state.bombCashout = p0.bombs * BOMB_CASHOUT;
+    state.score += state.bombCashout;
+    spawnFloatingText(WORLD.width / 2, WORLD.height / 2, `炸彈換分 +${state.bombCashout}`, "#ff9a62", 24);
+  }
+  // C 📡 完賽打點:玩了 20 秒以上才算一場(誤觸不算),重播不算
+  if (!state.replayPlaying && typeof window.psPing === "function" && performance.now() - state.runStartMs > 20000) { try { window.psPing("flyshoot-done"); } catch (_) {} }
 
   if (state.score >= 50000) unlockAch("score-50k");
   if (state.coop && state.score > 0) unlockAch("co-op");
@@ -3570,6 +3751,10 @@ function buildRunStats(earnedCredits) {
     damage: Math.round(state.damageTaken),
     bombs: state.bombsThrownThisRun,
     credits: earnedCredits,
+    flawless: state.flawlessWaves,
+    bombCashout: state.bombCashout,
+    bombsLeft: state.players[0] ? state.players[0].bombs : 0,
+    midBosses: state.midBossKillsRun,
   };
 }
 
@@ -3594,7 +3779,8 @@ function showFinalMenu(earnedCredits) {
     `最終分數 ${stats.score}`,
     `難度 ${stats.difficulty}｜抵達 Wave ${stats.wave}｜時間 ${formatDuration(stats.duration)}
 擊殺 ${stats.kills}｜Boss ${stats.bosses}｜最高連擊 ${stats.maxCombo}
-寶物 ${stats.loot}｜受傷 ${stats.damage}｜炸彈 ${stats.bombs}｜金幣 +${stats.credits}`,
+寶物 ${stats.loot}｜受傷 ${stats.damage}｜炸彈 ${stats.bombs}｜金幣 +${stats.credits}
+★ 無傷波 ${stats.flawless}｜炸彈換分 +${stats.bombCashout}（剩 ${stats.bombsLeft} 顆）｜中 Boss ${stats.midBosses}`,
     "重新出擊"
   );
   refreshMenuPanels();
@@ -3609,6 +3795,100 @@ function showMessage(tag, title, body, btn) {
 }
 
 function hideMessage() { els.message.hidden = true; }
+
+// =====================================================================
+//  v20:特殊技 / 教學卡 / 時間減速畫面
+// =====================================================================
+
+function useSkill(p) {
+  if (!p || !state.running || state.scene !== "play") return;
+  if (p.skillCd > 0 || p.skillActive > 0 || p.skillCharging > 0) {
+    spawnFloatingText(p.x, p.y - 40, p.skillCd > 0 ? `冷卻 ${Math.ceil(p.skillCd)}s` : "施放中", "#d7a6ff", 12);
+    return;
+  }
+  p.skillCd = p.skillCdMax;
+  if (p.skill === "deflect") {
+    p.skillActive = p.skillDur;
+    spawnFloatingText(p.x, p.y - 44, "🛡 反彈護罩", "#8cffbf", 18);
+    audio.loot();
+  } else if (p.skill === "charge") {
+    p.skillCharging = p.skillDur;
+    p.skillActive = p.skillDur;
+    spawnFloatingText(p.x, p.y - 44, "💥 蓄力…", "#ffd86c", 18);
+    audio.laser();
+  } else {
+    state.timeWarp = { t: p.skillDur, factor: 0.35 };
+    p.skillActive = p.skillDur;
+    spawnFloatingText(WORLD.width / 2, WORLD.height / 2 - 60, "⏳ 時間減速", "#9afcff", 24);
+    audio.homing();
+  }
+  shake(3, 0.1);
+  syncSkillHud(p);
+}
+
+function fireChargeCannon(p) {
+  state.beams.push({
+    x: p.x, y: p.y - 18, angle: -Math.PI / 2, sweep: 0, duration: 0.55, age: 0,
+    width: 96, color: "#ffd86c", damage: 1.3 * (p.dmgBonus || 1), fromPlayer: true, owner: p.id, cannon: true,
+  });
+  shake(12, 0.4); hitstop(0.04);
+  audio.bomb();
+  spawnFloatingText(p.x, p.y - 60, "蓄力大砲!", "#ffd86c", 22);
+}
+
+function syncSkillHud(p) {
+  if (!els.skillBtn) return;
+  if (!p || !p.skill) { els.skillBtn.hidden = true; return; }
+  const sk = SKILLS[p.skill] || SKILLS.slow;
+  els.skillBtn.hidden = false;
+  els.skillIcon.textContent = sk.icon;
+  els.skillBtn.title = `${sk.name}(C):${sk.desc}`;
+  const cd = Math.ceil(Math.max(0, p.skillCd));
+  els.skillCd.textContent = p.skillActive > 0 ? "ON" : cd > 0 ? cd + "s" : "SKILL";
+  els.skillBtn.classList.toggle("is-cd", cd > 0 && !(p.skillActive > 0));
+  els.skillBtn.classList.toggle("is-on", p.skillActive > 0);
+}
+
+function openTutorial(withStart) {
+  if (!els.tutorialOverlay) return;
+  state.tutorialOpen = true;
+  els.tutorialOverlay.dataset.start = withStart ? "1" : "0";
+  if (withStart) { state.running = false; audio.stopBgm(); }
+  if (els.tutorialGo) els.tutorialGo.textContent = withStart ? "知道了,出擊!" : "知道了";
+  els.tutorialOverlay.hidden = false;
+  try { els.tutorialGo.focus({ preventScroll: true }); } catch (_) {}
+}
+
+function closeTutorial() {
+  if (!els.tutorialOverlay) return;
+  safeSet(STORAGE.tutorialSeen, "1");
+  const withStart = els.tutorialOverlay.dataset.start === "1";
+  els.tutorialOverlay.hidden = true;
+  state.tutorialOpen = false;
+  if (withStart && state.scene === "play" && !state.gameOver) {
+    state.running = true;
+    audio.ensure();
+    audio.startBgm();
+    spawnFloatingText(WORLD.width / 2, WORLD.height / 2 + 40, `開局 ${START_GRACE} 秒無敵`, "#8cffbf", 18);
+  }
+}
+
+function drawTimeWarp() {
+  if (!state.timeWarp) return;
+  ctx.save();
+  const a = clamp(state.timeWarp.t / 0.6, 0, 1) * 0.35;
+  const g = ctx.createRadialGradient(WORLD.width / 2, WORLD.height / 2, WORLD.height * 0.25, WORLD.width / 2, WORLD.height / 2, WORLD.height * 0.75);
+  g.addColorStop(0, "rgba(154,252,255,0)");
+  g.addColorStop(1, `rgba(60,140,255,${a})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+  ctx.fillStyle = "rgba(154,252,255,0.85)";
+  ctx.font = 'bold 14px "Trebuchet MS", sans-serif';
+  ctx.textAlign = "center";
+  ctx.fillText(`⏳ 時間減速 ${state.timeWarp.t.toFixed(1)}s`, WORLD.width / 2, 64);
+  ctx.textAlign = "start";
+  ctx.restore();
+}
 
 // =====================================================================
 //  Pause
@@ -3695,13 +3975,15 @@ function registerInput() {
   }
   window.addEventListener("keydown", (event) => {
     if (event.target && (event.target.tagName === "INPUT" || event.target.tagName === "TEXTAREA")) return;
-    const block = ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","KeyW","KeyA","KeyS","KeyD","KeyQ","KeyE","ShiftLeft","ShiftRight","KeyP","Escape","Tab","KeyX"];
+    const block = ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","KeyW","KeyA","KeyS","KeyD","KeyQ","KeyE","ShiftLeft","ShiftRight","KeyP","Escape","Tab","KeyX","KeyC","KeyR"];
     if (block.includes(event.code)) event.preventDefault();
     keys.add(event.code);
     if (event.code === "Space") useBomb();
     if (event.code === "KeyQ" && state.coop) useBomb();
     if (event.code === "KeyP" || event.code === "Escape") togglePause();
     if (event.code === "Tab" || event.code === "KeyX") cycleWeapon(state.players[0]);
+    if (event.code === "KeyC") useSkill(state.players[0]);
+    if (event.code === "KeyR" && state.coop) useSkill(state.players[1]);
     // Continue overlay shortcuts
     if (state.continueOverlay) {
       if (event.code === "Enter" || event.code === "KeyY") acceptContinue();
@@ -3734,6 +4016,12 @@ function registerInput() {
   canvas.addEventListener("pointercancel", () => { pointer.active = false; });
 
   els.bombBtn.addEventListener("click", useBomb);
+  if (els.skillBtn) els.skillBtn.addEventListener("click", () => useSkill(state.players[0]));
+  if (els.tutorialGo) els.tutorialGo.addEventListener("click", closeTutorial);
+  if (els.tutorialBtn) els.tutorialBtn.addEventListener("click", () => openTutorial(false));
+  // G 音量三檔
+  if (els.bgmVolume) { els.bgmVolume.value = String(audio.volBgm); els.bgmVolume.addEventListener("change", () => { audio.ensure(); audio.setVolume("bgm", els.bgmVolume.value); }); }
+  if (els.sfxVolume) { els.sfxVolume.value = String(audio.volSfx); els.sfxVolume.addEventListener("change", () => { audio.ensure(); audio.setVolume("sfx", els.sfxVolume.value); }); }
   els.focusBtn.addEventListener("pointerdown", () => {
     keys.add("ShiftLeft"); els.focusBtn.classList.add("is-active");
   });
@@ -3894,6 +4182,7 @@ function renderCharacters() {
     tile.innerHTML = `<h3>${c.name}</h3>
       <small>${c.desc}</small>
       <small>HP ${c.hp}　速度 ${c.speed}　射速 ${c.fireRate.toFixed(2)}　傷害 ×${c.dmg}</small>
+      <small class="skill-line">✨ ${(SKILLS[c.skill] || SKILLS.slow).icon} ${(SKILLS[c.skill] || SKILLS.slow).name}:${(SKILLS[c.skill] || SKILLS.slow).desc}(冷卻 ${c.skillCd || (SKILLS[c.skill] || SKILLS.slow).cd} 秒;按 C 或 SKILL 鈕)</small>
       ${lockTag}`;
     tile.addEventListener("click", () => {
       if (!unlocked) {
@@ -3984,6 +4273,7 @@ fitCanvas();
 buildSprites();
 seedStars();
 setScene("menu");
+document.body.classList.add("fresh"); // A 還沒玩過:選單態不顯示全 0 的統計卡
 els.soundBtn.textContent = audio.muted ? "音效 OFF" : "音效 ON";
 registerInput();
 registerInstallPrompt();
@@ -3993,8 +4283,9 @@ refreshMenuPanels();
 showMessage(
   "READY",
   "10 條命，10 顆炸彈，直接升空",
-  "選機體、選戰場、買強化，擊破目標掉武器（散彈／雷射／追蹤雷射）。",
+  "選機體、選戰場、買強化，擊破目標掉武器（散彈／雷射／追蹤雷射）。每關第 5 波中 Boss、第 10 波 STAGE BOSS;一波不受傷下一波分數 ×2。",
   "開始戰鬥"
 );
+if (els.skillBtn) els.skillBtn.hidden = true;
 syncHud();
 requestAnimationFrame(tick);
