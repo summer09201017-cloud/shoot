@@ -137,14 +137,16 @@ const MAX_REPLAY_SLOTS = 5;
 
 // 雙皮膚(2026-07-10):開戰前選單可選;純視覺換皮,機制/判定/排行/Replay 全共用
 let currentSkin = null; // init 時從 localStorage 讀
+const SKINS = ["mech", "rock", "deep"]; // ✈️ 機械戰機(原版)/ ☄️ 隕石風暴 / 🐙 深海潛航(v21,2026-09-15)
 function getSkin() {
-  if (currentSkin !== "mech" && currentSkin !== "rock") {
-    currentSkin = safeGet(STORAGE.skin) === "rock" ? "rock" : "mech";
+  if (!SKINS.includes(currentSkin)) {
+    const saved = safeGet(STORAGE.skin);
+    currentSkin = SKINS.includes(saved) ? saved : "mech";
   }
   return currentSkin;
 }
 function setSkin(v) {
-  currentSkin = v === "rock" ? "rock" : "mech";
+  currentSkin = SKINS.includes(v) ? v : "mech";
   safeSet(STORAGE.skin, currentSkin);
 }
 function skinSprite(base) { return sprites[base + "_" + getSkin()]; }
@@ -628,7 +630,32 @@ function drawMechEnemyArt(cx, type, color, r) {
 function drawMechBossArt(cx, type) {
   const r = 70;
   cx.shadowBlur = 22;
-  if (type === "vanguard") {
+  if (type === "hydra") {
+    // 九頭蛇艦(v21):寬體母艦 + 弧線排開的五顆砲塔「頭」,每顆用「頸管」接回主體
+    cx.shadowColor = "#5df2c8";
+    cx.fillStyle = "#0f2a2a";
+    cx.beginPath();
+    cx.moveTo(-r * 0.95, -r * 0.1); cx.lineTo(-r * 0.6, -r * 0.55); cx.lineTo(r * 0.6, -r * 0.55); cx.lineTo(r * 0.95, -r * 0.1);
+    cx.lineTo(r * 0.7, r * 0.35); cx.lineTo(r * 0.25, r * 0.15); cx.lineTo(0, r * 0.4); cx.lineTo(-r * 0.25, r * 0.15); cx.lineTo(-r * 0.7, r * 0.35);
+    cx.closePath(); cx.fill();
+    cx.shadowBlur = 0;
+    cx.strokeStyle = "#1d6b62";
+    cx.lineWidth = 7;
+    cx.lineCap = "round";
+    const heads = [[-r * 0.8, r * 0.7], [-r * 0.42, r * 0.9], [0, r * 0.98], [r * 0.42, r * 0.9], [r * 0.8, r * 0.7]];
+    heads.forEach(([hx, hy]) => { cx.beginPath(); cx.moveTo(hx * 0.35, r * 0.1); cx.quadraticCurveTo(hx * 0.9, hy * 0.55, hx, hy); cx.stroke(); });
+    heads.forEach(([hx, hy]) => {
+      cx.fillStyle = "#0a1320"; cx.beginPath(); cx.arc(hx, hy, 11, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = "#5df2c8"; cx.beginPath(); cx.arc(hx, hy, 5, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(hx, hy, 1.8, 0, Math.PI * 2); cx.fill();
+    });
+    cx.fillStyle = "#5df2c8";
+    cx.fillRect(-r * 0.5, -r * 0.42, r, r * 0.12);
+    cx.fillStyle = "#0a1320";
+    cx.beginPath(); cx.arc(0, -r * 0.1, r * 0.28, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#bfffee";
+    cx.beginPath(); cx.arc(0, -r * 0.1, r * 0.12, 0, Math.PI * 2); cx.fill();
+  } else if (type === "vanguard") {
     cx.shadowColor = "#ff8866";
     cx.fillStyle = "#3a1410";
     cx.beginPath();
@@ -818,8 +845,8 @@ function drawRockEnemyArt(cx, type, color, r) {
 // 熔岩巨隕=岩漿裂紋、烈焰彗核=彗星火尾。
 function drawRockBossArt(cx, type) {
   const r = 70;
-  const COLORS = { vanguard: "#ff8866", harrier: "#ffb84d", leviathan: "#a266ff", wyrm: "#66ff9f", phoenix: "#ff5d5d" };
-  const BODIES = { vanguard: "#3a2318", harrier: "#33281c", leviathan: "#221540", wyrm: "#12321f", phoenix: "#3a1410" };
+  const COLORS = { vanguard: "#ff8866", harrier: "#ffb84d", leviathan: "#a266ff", wyrm: "#66ff9f", phoenix: "#ff5d5d", hydra: "#5df2c8" };
+  const BODIES = { vanguard: "#3a2318", harrier: "#33281c", leviathan: "#221540", wyrm: "#12321f", phoenix: "#3a1410", hydra: "#12302c" };
   const color = COLORS[type] || "#ff8866";
   const lobes = [1.0, 0.86, 0.96, 0.78, 1.0, 0.9, 0.82, 0.97, 0.84, 0.94, 0.8, 0.92];
   // 彗核的火尾先畫(往上,像朝玩家俯衝)
@@ -846,7 +873,20 @@ function drawRockBossArt(cx, type) {
   cx.closePath(); cx.fill();
   cx.shadowBlur = 0;
 
-  if (type === "vanguard") {
+  if (type === "hydra") {
+    // 裂變雙子隕(v21):一條大裂縫把巨岩分成兩瓣,各藏一顆會分裂的能量核,周圍三顆小衛星
+    cx.strokeStyle = "#041a17";
+    cx.lineWidth = 7;
+    cx.beginPath(); cx.moveTo(-r * 0.15, -r * 0.95); cx.lineTo(r * 0.05, -r * 0.3); cx.lineTo(-r * 0.1, r * 0.2); cx.lineTo(r * 0.1, r * 0.95); cx.stroke();
+    [[-r * 0.38, -r * 0.05], [r * 0.4, r * 0.1]].forEach(([cxp, cyp]) => {
+      cx.fillStyle = color; cx.beginPath(); cx.arc(cxp, cyp, r * 0.24, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = "#bfffee"; cx.beginPath(); cx.arc(cxp, cyp, r * 0.12, 0, Math.PI * 2); cx.fill();
+      cx.strokeStyle = "#ffffff"; cx.lineWidth = 2; cx.globalAlpha = 0.6;
+      cx.beginPath(); cx.arc(cxp, cyp, r * 0.3, 0, Math.PI * 2); cx.stroke(); cx.globalAlpha = 1;
+    });
+    cx.fillStyle = "#1b4a44";
+    [[-r * 0.72, r * 0.62], [r * 0.7, -r * 0.62], [r * 0.15, -r * 0.7]].forEach(([sx, sy]) => { cx.beginPath(); cx.arc(sx, sy, r * 0.09, 0, Math.PI * 2); cx.fill(); });
+  } else if (type === "vanguard") {
     // 巨岩先鋒:大坑疤+受光面
     cx.fillStyle = "#241610";
     cx.beginPath(); cx.arc(-r * 0.35, -r * 0.25, r * 0.26, 0, Math.PI * 2); cx.fill();
@@ -932,6 +972,159 @@ function drawRockBossArt(cx, type) {
   }
 }
 
+// 🐙 深海潛航皮膚(v21,2026-09-15 使用者拍板 Q「第三皮膚或新 Boss」兩個都做):敵機→海洋生物 —— basic=水母、elite=燈籠魚(誘餌燈會亮)、
+// formation=魟魚。判定/波次/掉寶全不動,純換皮;子彈語意=噴出的毒刺與氣泡。
+function drawDeepEnemyArt(cx, type, color, r) {
+  cx.shadowColor = color;
+  cx.shadowBlur = 8;
+  if (type === "elite") {
+    // 燈籠魚:圓胖身體 + 大嘴利牙 + 頭頂誘餌燈
+    cx.fillStyle = "#2c2205";
+    cx.beginPath(); cx.ellipse(0, r * 0.12, r * 0.82, r * 0.6, 0, 0, Math.PI * 2); cx.fill();
+    cx.shadowBlur = 0;
+    cx.fillStyle = "#120d02";
+    cx.beginPath(); cx.moveTo(-r * 0.7, r * 0.3); cx.lineTo(r * 0.7, r * 0.3); cx.lineTo(0, r * 0.75); cx.closePath(); cx.fill();
+    cx.fillStyle = "#ffffff";
+    for (let i = -2; i <= 2; i++) { cx.beginPath(); cx.moveTo(i * r * 0.22 - 3, r * 0.3); cx.lineTo(i * r * 0.22 + 3, r * 0.3); cx.lineTo(i * r * 0.22, r * 0.48); cx.closePath(); cx.fill(); }
+    cx.strokeStyle = "#8a7a3a"; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(0, -r * 0.45); cx.quadraticCurveTo(r * 0.35, -r * 0.95, r * 0.45, -r * 0.7); cx.stroke();
+    cx.shadowColor = color; cx.shadowBlur = 12;
+    cx.fillStyle = color; cx.beginPath(); cx.arc(r * 0.45, -r * 0.7, r * 0.13, 0, Math.PI * 2); cx.fill();
+    cx.shadowBlur = 0;
+    cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(-r * 0.3, -r * 0.1, r * 0.16, 0, Math.PI * 2); cx.arc(r * 0.3, -r * 0.1, r * 0.16, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#0a0a0a"; cx.beginPath(); cx.arc(-r * 0.3, -r * 0.08, r * 0.08, 0, Math.PI * 2); cx.arc(r * 0.3, -r * 0.08, r * 0.08, 0, Math.PI * 2); cx.fill();
+  } else if (type === "formation") {
+    // 魟魚:菱形翅 + 長尾,成群飛
+    cx.fillStyle = "#12243e";
+    cx.beginPath(); cx.moveTo(0, -r * 0.7); cx.lineTo(r, 0); cx.lineTo(0, r * 0.35); cx.lineTo(-r, 0); cx.closePath(); cx.fill();
+    cx.shadowBlur = 0;
+    cx.fillStyle = color; cx.globalAlpha = 0.55;
+    cx.beginPath(); cx.moveTo(0, -r * 0.45); cx.lineTo(r * 0.6, 0); cx.lineTo(0, r * 0.2); cx.lineTo(-r * 0.6, 0); cx.closePath(); cx.fill();
+    cx.globalAlpha = 1;
+    cx.strokeStyle = color; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(0, r * 0.3); cx.quadraticCurveTo(r * 0.15, r * 0.65, 0, r * 0.98); cx.stroke();
+    cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(-r * 0.18, -r * 0.3, 2.2, 0, Math.PI * 2); cx.arc(r * 0.18, -r * 0.3, 2.2, 0, Math.PI * 2); cx.fill();
+  } else {
+    // 水母:發光傘 + 四條飄動觸手
+    cx.fillStyle = "#3a1030";
+    cx.beginPath(); cx.ellipse(0, -r * 0.2, r * 0.88, r * 0.62, 0, Math.PI, Math.PI * 2); cx.lineTo(r * 0.88, -r * 0.2); cx.quadraticCurveTo(0, r * 0.15, -r * 0.88, -r * 0.2); cx.closePath(); cx.fill();
+    cx.shadowBlur = 0;
+    cx.fillStyle = color; cx.globalAlpha = 0.5;
+    cx.beginPath(); cx.ellipse(0, -r * 0.28, r * 0.55, r * 0.35, 0, Math.PI, Math.PI * 2); cx.closePath(); cx.fill();
+    cx.globalAlpha = 1;
+    cx.strokeStyle = color; cx.lineWidth = 2; cx.lineCap = "round";
+    [-0.55, -0.2, 0.2, 0.55].forEach((k, i) => { cx.beginPath(); cx.moveTo(k * r, r * 0.05); cx.quadraticCurveTo(k * r + (i % 2 ? 6 : -6), r * 0.5, k * r * 0.8, r * 0.95); cx.stroke(); });
+    cx.fillStyle = "rgba(255,255,255,0.7)"; cx.beginPath(); cx.arc(-r * 0.3, -r * 0.5, r * 0.1, 0, Math.PI * 2); cx.fill();
+  }
+}
+
+// 🐙 深海潛航皮膚 Boss:六隻深海巨獸(r=70,判定與 telegraph 顏色沿用各 Boss 色)——巨鎧蟹 / 劍旗魚 / 深海巨鯨 / 海蛇 / 烈焰水母 / 九頭海怪
+function drawDeepBossArt(cx, type) {
+  const r = 70;
+  const COLORS = { vanguard: "#ff8866", harrier: "#ffb84d", leviathan: "#a266ff", wyrm: "#66ff9f", phoenix: "#ff5d5d", hydra: "#5df2c8" };
+  const color = COLORS[type] || "#5df2c8";
+  cx.shadowBlur = 22;
+  cx.shadowColor = color;
+  cx.lineCap = "round";
+  if (type === "vanguard") {
+    // 巨鎧蟹:橢圓甲殼 + 兩隻大螯 + 六條腿 + 眼柱
+    cx.strokeStyle = "#3a1a10"; cx.lineWidth = 8;
+    [[-1, -0.25], [-1, 0.1], [-1, 0.45], [1, -0.25], [1, 0.1], [1, 0.45]].forEach(([s, k]) => { cx.beginPath(); cx.moveTo(s * r * 0.5, k * r); cx.lineTo(s * r * 0.95, k * r + r * 0.35); cx.stroke(); });
+    cx.fillStyle = "#3a1a10";
+    cx.beginPath(); cx.ellipse(0, 0, r * 0.78, r * 0.58, 0, 0, Math.PI * 2); cx.fill();
+    cx.shadowBlur = 0;
+    [[-1], [1]].forEach(([s]) => {
+      cx.fillStyle = color;
+      cx.beginPath(); cx.arc(s * r * 0.8, -r * 0.55, r * 0.3, 0, Math.PI * 2); cx.fill();
+      cx.fillStyle = "#3a1a10";
+      cx.beginPath(); cx.moveTo(s * r * 0.8, -r * 0.55); cx.lineTo(s * r * 0.8 + s * r * 0.35, -r * 0.75); cx.lineTo(s * r * 0.8 + s * r * 0.35, -r * 0.35); cx.closePath(); cx.fill();
+    });
+    cx.strokeStyle = color; cx.lineWidth = 3; cx.globalAlpha = 0.6;
+    cx.beginPath(); cx.ellipse(0, 0, r * 0.55, r * 0.38, 0, 0, Math.PI * 2); cx.stroke(); cx.globalAlpha = 1;
+    cx.strokeStyle = "#ffffff"; cx.lineWidth = 3;
+    cx.beginPath(); cx.moveTo(-r * 0.22, -r * 0.45); cx.lineTo(-r * 0.25, -r * 0.8); cx.moveTo(r * 0.22, -r * 0.45); cx.lineTo(r * 0.25, -r * 0.8); cx.stroke();
+    cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(-r * 0.25, -r * 0.82, 6, 0, Math.PI * 2); cx.arc(r * 0.25, -r * 0.82, 6, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#0a0a0a"; cx.beginPath(); cx.arc(-r * 0.25, -r * 0.8, 3, 0, Math.PI * 2); cx.arc(r * 0.25, -r * 0.8, 3, 0, Math.PI * 2); cx.fill();
+  } else if (type === "harrier") {
+    // 劍旗魚:細長身體朝下衝 + 側邊大帆背鰭 + 長劍
+    cx.fillStyle = "#1e2a3a";
+    cx.beginPath(); cx.ellipse(0, 0, r * 0.32, r * 0.85, 0, 0, Math.PI * 2); cx.fill();
+    cx.shadowBlur = 0;
+    cx.fillStyle = color; cx.globalAlpha = 0.85;
+    cx.beginPath(); cx.moveTo(-r * 0.25, -r * 0.55); cx.lineTo(-r * 0.98, -r * 0.05); cx.lineTo(-r * 0.25, r * 0.35); cx.closePath(); cx.fill();
+    cx.globalAlpha = 1;
+    cx.fillStyle = "#3a5a7a";
+    cx.beginPath(); cx.moveTo(-r * 0.15, -r * 0.8); cx.lineTo(-r * 0.55, -r * 1.1); cx.lineTo(0, -r * 0.75); cx.lineTo(r * 0.55, -r * 1.1); cx.lineTo(r * 0.15, -r * 0.8); cx.closePath(); cx.fill();
+    cx.strokeStyle = "#e8f4ff"; cx.lineWidth = 4;
+    cx.beginPath(); cx.moveTo(0, r * 0.8); cx.lineTo(0, r * 1.18); cx.stroke();
+    cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(r * 0.14, r * 0.45, 6, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#0a0a0a"; cx.beginPath(); cx.arc(r * 0.15, r * 0.47, 3, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = color; cx.lineWidth = 2; cx.globalAlpha = 0.6;
+    for (let i = -2; i <= 2; i++) { cx.beginPath(); cx.moveTo(-r * 0.25, i * r * 0.18); cx.lineTo(r * 0.25, i * r * 0.18); cx.stroke(); }
+    cx.globalAlpha = 1;
+  } else if (type === "leviathan") {
+    // 深海巨鯨:寬闊身體 + 尾鰭在上 + 白肚 + 斑點
+    cx.fillStyle = "#1d0e3a";
+    cx.beginPath(); cx.moveTo(-r * 0.35, -r * 0.95); cx.lineTo(0, -r * 0.6); cx.lineTo(r * 0.35, -r * 0.95); cx.lineTo(r * 0.2, -r * 0.55); cx.lineTo(-r * 0.2, -r * 0.55); cx.closePath(); cx.fill();
+    cx.beginPath(); cx.ellipse(0, r * 0.1, r * 0.92, r * 0.62, 0, 0, Math.PI * 2); cx.fill();
+    cx.shadowBlur = 0;
+    cx.fillStyle = "#3a2860";
+    cx.beginPath(); cx.ellipse(0, r * 0.32, r * 0.7, r * 0.3, 0, 0, Math.PI); cx.fill();
+    cx.fillStyle = color;
+    [[-0.5, -0.15], [-0.2, -0.3], [0.2, -0.32], [0.55, -0.1], [0.05, 0.05]].forEach(([kx, ky]) => { cx.beginPath(); cx.arc(kx * r, ky * r, 5, 0, Math.PI * 2); cx.fill(); });
+    cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(-r * 0.55, r * 0.25, 7, 0, Math.PI * 2); cx.arc(r * 0.55, r * 0.25, 7, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#0a0a0a"; cx.beginPath(); cx.arc(-r * 0.55, r * 0.27, 3.5, 0, Math.PI * 2); cx.arc(r * 0.55, r * 0.27, 3.5, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = "#ffffff"; cx.lineWidth = 2; cx.globalAlpha = 0.5;
+    cx.beginPath(); cx.moveTo(-r * 0.3, r * 0.55); cx.quadraticCurveTo(0, r * 0.68, r * 0.3, r * 0.55); cx.stroke(); cx.globalAlpha = 1;
+  } else if (type === "wyrm") {
+    // 海蛇:S 形身體從上蜷到下,頭在最下面朝玩家
+    cx.strokeStyle = "#0a3a25"; cx.lineWidth = r * 0.34;
+    cx.beginPath(); cx.moveTo(-r * 0.55, -r * 0.9); cx.bezierCurveTo(r * 1.3, -r * 0.7, -r * 1.3, r * 0.2, r * 0.05, r * 0.6); cx.stroke();
+    cx.shadowBlur = 0;
+    cx.strokeStyle = color; cx.lineWidth = 4; cx.globalAlpha = 0.7;
+    cx.beginPath(); cx.moveTo(-r * 0.55, -r * 0.9); cx.bezierCurveTo(r * 1.3, -r * 0.7, -r * 1.3, r * 0.2, r * 0.05, r * 0.6); cx.stroke();
+    cx.globalAlpha = 1;
+    cx.fillStyle = color;
+    [[-r * 0.3, -r * 0.62], [r * 0.4, -r * 0.35], [-r * 0.35, r * 0.05]].forEach(([fx, fy]) => { cx.beginPath(); cx.moveTo(fx, fy); cx.lineTo(fx - r * 0.2, fy - r * 0.3); cx.lineTo(fx + r * 0.1, fy - r * 0.05); cx.closePath(); cx.fill(); });
+    cx.fillStyle = "#0a3a25";
+    cx.beginPath(); cx.ellipse(r * 0.05, r * 0.7, r * 0.3, r * 0.26, 0, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#ffd866"; cx.beginPath(); cx.arc(-r * 0.08, r * 0.62, 5, 0, Math.PI * 2); cx.arc(r * 0.18, r * 0.62, 5, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#0a0a0a"; cx.beginPath(); cx.arc(-r * 0.08, r * 0.63, 2, 0, Math.PI * 2); cx.arc(r * 0.18, r * 0.63, 2, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = "#ff6d6d"; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(r * 0.05, r * 0.92); cx.lineTo(r * 0.05, r * 1.1); cx.moveTo(r * 0.05, r * 1.02); cx.lineTo(r * 0.15, r * 1.12); cx.moveTo(r * 0.05, r * 1.02); cx.lineTo(-r * 0.05, r * 1.12); cx.stroke();
+  } else if (type === "phoenix") {
+    // 烈焰水母:巨大發光傘 + 六條火焰觸手
+    cx.strokeStyle = color; cx.lineWidth = 5; cx.globalAlpha = 0.75;
+    [-0.7, -0.42, -0.14, 0.14, 0.42, 0.7].forEach((k, i) => { cx.beginPath(); cx.moveTo(k * r, r * 0.15); cx.quadraticCurveTo(k * r + (i % 2 ? 14 : -14), r * 0.7, k * r * 0.85, r * 1.12); cx.stroke(); });
+    cx.globalAlpha = 1;
+    cx.fillStyle = "#3a0a0a";
+    cx.beginPath(); cx.ellipse(0, -r * 0.2, r * 0.92, r * 0.68, 0, Math.PI, Math.PI * 2); cx.lineTo(r * 0.92, -r * 0.2); cx.quadraticCurveTo(0, r * 0.25, -r * 0.92, -r * 0.2); cx.closePath(); cx.fill();
+    cx.shadowBlur = 0;
+    const g = cx.createRadialGradient(0, -r * 0.35, r * 0.05, 0, -r * 0.35, r * 0.7);
+    g.addColorStop(0, "#ffd866"); g.addColorStop(0.5, "#ff8a4d"); g.addColorStop(1, "rgba(255,93,93,0)");
+    cx.fillStyle = g;
+    cx.beginPath(); cx.ellipse(0, -r * 0.25, r * 0.7, r * 0.45, 0, Math.PI, Math.PI * 2); cx.closePath(); cx.fill();
+    cx.fillStyle = "rgba(255,255,255,0.65)"; cx.beginPath(); cx.arc(-r * 0.35, -r * 0.55, r * 0.11, 0, Math.PI * 2); cx.fill();
+  } else {
+    // 九頭海怪(hydra):圓頭 + 六條伸展的觸手(帶吸盤)+ 一對大眼 + 鳥嘴
+    cx.strokeStyle = "#0f5a50"; cx.lineWidth = r * 0.17;
+    const arms = [[-0.95, 0.15, -0.9, 0.95], [-0.7, 0.4, -0.45, 1.1], [-0.25, 0.5, -0.1, 1.15], [0.25, 0.5, 0.1, 1.15], [0.7, 0.4, 0.45, 1.1], [0.95, 0.15, 0.9, 0.95]];
+    arms.forEach(([c1x, c1y, ex, ey]) => { cx.beginPath(); cx.moveTo(c1x * r * 0.3, r * 0.2); cx.quadraticCurveTo(c1x * r, c1y * r, ex * r, ey * r); cx.stroke(); });
+    cx.shadowBlur = 0;
+    cx.fillStyle = color; cx.globalAlpha = 0.85;
+    arms.forEach(([c1x, c1y, ex, ey]) => { [0.45, 0.75].forEach((t) => { const x = (1 - t) * (1 - t) * c1x * r * 0.3 + 2 * (1 - t) * t * c1x * r + t * t * ex * r; const y = (1 - t) * (1 - t) * r * 0.2 + 2 * (1 - t) * t * c1y * r + t * t * ey * r; cx.beginPath(); cx.arc(x, y, 3.5, 0, Math.PI * 2); cx.fill(); }); });
+    cx.globalAlpha = 1;
+    cx.fillStyle = "#0a2e2a";
+    cx.beginPath(); cx.ellipse(0, -r * 0.15, r * 0.6, r * 0.62, 0, 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = color; cx.lineWidth = 3; cx.globalAlpha = 0.5;
+    cx.beginPath(); cx.ellipse(0, -r * 0.15, r * 0.45, r * 0.47, 0, 0, Math.PI * 2); cx.stroke(); cx.globalAlpha = 1;
+    cx.fillStyle = "#ffffff"; cx.beginPath(); cx.arc(-r * 0.22, -r * 0.25, 11, 0, Math.PI * 2); cx.arc(r * 0.22, -r * 0.25, 11, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#0a0a0a"; cx.beginPath(); cx.arc(-r * 0.2, -r * 0.22, 5.5, 0, Math.PI * 2); cx.arc(r * 0.24, -r * 0.22, 5.5, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = color; cx.beginPath(); cx.arc(-r * 0.19, -r * 0.24, 2, 0, Math.PI * 2); cx.arc(r * 0.25, -r * 0.24, 2, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = "#ffd866"; cx.beginPath(); cx.moveTo(-r * 0.08, r * 0.15); cx.lineTo(r * 0.08, r * 0.15); cx.lineTo(0, r * 0.32); cx.closePath(); cx.fill();
+  }
+}
+
 function buildSprites() {
   // Player ships — accent color drives the team color
   sprites.player_alpha    = makeSprite(48, 56, (cx) => drawShip(cx, "#66e4ff", "#cfe9ff", "alpha"));
@@ -959,10 +1152,15 @@ function buildSprites() {
   sprites.enemy_basic_rock     = makeSprite(40, 40, (cx) => drawRockEnemyArt(cx, "basic",     "#ff6d6d", 18));
   sprites.enemy_elite_rock     = makeSprite(60, 60, (cx) => drawRockEnemyArt(cx, "elite",     "#ffd86c", 26));
   sprites.enemy_formation_rock = makeSprite(36, 36, (cx) => drawRockEnemyArt(cx, "formation", "#a8c8ff", 16));
+  // 🐙 深海潛航(v21):basic=水母、elite=燈籠魚、formation=魟魚
+  sprites.enemy_basic_deep     = makeSprite(40, 40, (cx) => drawDeepEnemyArt(cx, "basic",     "#ff6d6d", 18));
+  sprites.enemy_elite_deep     = makeSprite(60, 60, (cx) => drawDeepEnemyArt(cx, "elite",     "#ffd86c", 26));
+  sprites.enemy_formation_deep = makeSprite(36, 36, (cx) => drawDeepEnemyArt(cx, "formation", "#a8c8ff", 16));
 
-  ["vanguard", "harrier", "leviathan", "wyrm", "phoenix"].forEach((id) => {
+  BOSS_TYPES.forEach(({ id }) => {
     sprites["boss_" + id + "_mech"] = makeSprite(170, 170, (cx) => drawMechBossArt(cx, id));
     sprites["boss_" + id + "_rock"] = makeSprite(170, 170, (cx) => drawRockBossArt(cx, id));
+    sprites["boss_" + id + "_deep"] = makeSprite(170, 170, (cx) => drawDeepBossArt(cx, id));
   });
 }
 
@@ -1467,13 +1665,20 @@ function makeFormationEnemy(id) {
 //  Boss
 // =====================================================================
 
+// v21:第六隻 Boss「九頭蛇艦 hydra」加進關卡循環(第 6 關 STAGE BOSS、第 5 關中 Boss 預告版);名字三套皮膚各一。
+//     Boss Rush 仍是原本五隻(計時榜要能跟舊紀錄比)。
 const BOSS_TYPES = [
-  { id: "vanguard",  name: "STAGE BOSS：先鋒護衛",  rockName: "STAGE BOSS：巨岩先鋒", color: "#ff8866" },
-  { id: "harrier",   name: "STAGE BOSS：獵風者",    rockName: "STAGE BOSS：裂空隕鐵", color: "#ffb84d" },
-  { id: "leviathan", name: "STAGE BOSS：雷霆鯨",    rockName: "STAGE BOSS：雷晶隕核", color: "#a266ff" },
-  { id: "wyrm",      name: "STAGE BOSS：天龍",      rockName: "STAGE BOSS：熔岩巨隕", color: "#66ff9f" },
-  { id: "phoenix",   name: "STAGE BOSS：不死鳥",    rockName: "STAGE BOSS：烈焰彗核", color: "#ff5d5d" },
+  { id: "vanguard",  name: "STAGE BOSS：先鋒護衛",  rockName: "STAGE BOSS：巨岩先鋒", deepName: "STAGE BOSS：巨鎧蟹",   color: "#ff8866" },
+  { id: "harrier",   name: "STAGE BOSS：獵風者",    rockName: "STAGE BOSS：裂空隕鐵", deepName: "STAGE BOSS：劍旗魚",   color: "#ffb84d" },
+  { id: "leviathan", name: "STAGE BOSS：雷霆鯨",    rockName: "STAGE BOSS：雷晶隕核", deepName: "STAGE BOSS：深海巨鯨", color: "#a266ff" },
+  { id: "wyrm",      name: "STAGE BOSS：天龍",      rockName: "STAGE BOSS：熔岩巨隕", deepName: "STAGE BOSS：海蛇",     color: "#66ff9f" },
+  { id: "phoenix",   name: "STAGE BOSS：不死鳥",    rockName: "STAGE BOSS：烈焰彗核", deepName: "STAGE BOSS：烈焰水母", color: "#ff5d5d" },
+  { id: "hydra",     name: "STAGE BOSS：九頭蛇艦",  rockName: "STAGE BOSS：裂變雙子隕", deepName: "STAGE BOSS：九頭海怪", color: "#5df2c8" },
 ];
+function bossNameFor(type) {
+  const k = getSkin();
+  return (k === "rock" ? type.rockName : k === "deep" ? type.deepName : null) || type.name;
+}
 
 function startBossWarning(forcedTypeId, opts) {
   const mid = !!(opts && opts.mid); // M 中 Boss:預告短一點、震動小一點
@@ -1501,7 +1706,7 @@ function spawnBoss(forcedTypeId, mid = false) {
   const tier = Math.floor((state.wave - 1) / BOSS_WAVE_INTERVAL);
   const hpBase = state.bossRush ? 380 + state.bossRushIdx * 80 : 220 + tier * 140 + state.stage * 80;
   const hp = scaledBossHp(mid ? Math.round(hpBase * MID_BOSS_HP_MUL) : hpBase);
-  const rawName = getSkin() === "rock" ? (type.rockName || type.name) : type.name;
+  const rawName = bossNameFor(type);
   state.boss = {
     type: type.id,
     name: mid ? rawName.replace("STAGE BOSS", "中 BOSS") : rawName,
@@ -1647,6 +1852,60 @@ function pSinChain(color, count, speed, telegraphTime = BOSS_TELEGRAPH_TIME) {
     });
   };
 }
+// v21 九頭蛇艦專用三招 —— 分裂彈(飛一段後炸成一圈小彈)、追蹤魚雷(慢慢轉向最近玩家、壽命到就散)、雙砲塔扇形(左右兩個砲口各瞄一次)
+function pSplitShot(color, count, speed, splitAfter = 0.75, shards = 6) {
+  return (b) => {
+    const t = nearestPlayer(b);
+    const ang = Math.atan2(t.y - b.y, t.x - b.x);
+    pushTelegraph({ kind: "fan", x: b.x, y: b.y + 20, angle: ang, spread: 0.5 * Math.max(0, count - 1), color, ttl: BOSS_TELEGRAPH_TIME });
+    pushDeferred(BOSS_TELEGRAPH_TIME, () => {
+      const half = (count - 1) / 2;
+      for (let i = -half; i <= half; i++) {
+        const a = ang + i * 0.5;
+        state.enemyBullets.push({
+          x: b.x, y: b.y + 20, vx: Math.cos(a) * scaledBulletSpeed(speed), vy: Math.sin(a) * scaledBulletSpeed(speed),
+          radius: 9, color, damage: 1, fromBoss: true,
+          split: { t: splitAfter, count: shards, speed: scaledBulletSpeed(speed * 0.9), color, phase: a },
+        });
+      }
+    });
+  };
+}
+function pTorpedoes(color, count, speed, life = 3.5, turn = 1.6) {
+  return (b) => {
+    pushTelegraph({ kind: "ring", x: b.x, y: b.y + 20, color, ttl: BOSS_TELEGRAPH_TIME });
+    pushDeferred(BOSS_TELEGRAPH_TIME, () => {
+      for (let i = 0; i < count; i++) {
+        const off = i - (count - 1) / 2;
+        const a = Math.PI / 2 + off * 0.55;
+        state.enemyBullets.push({
+          x: b.x + off * 26, y: b.y + 26, vx: Math.cos(a) * scaledBulletSpeed(speed), vy: Math.sin(a) * scaledBulletSpeed(speed),
+          radius: 6, color, damage: 1, fromBoss: true, homing: true, turn, life,
+        });
+      }
+    });
+  };
+}
+function pTwinFan(color, count, spread, speed, offset = 46) {
+  return (b) => {
+    const t = nearestPlayer(b);
+    [-offset, offset].forEach((dx) => {
+      const ang = Math.atan2(t.y - b.y, t.x - (b.x + dx));
+      pushTelegraph({ kind: "fan", x: b.x + dx, y: b.y + 20, angle: ang, spread: spread * (count - 1), color, ttl: BOSS_TELEGRAPH_TIME });
+      pushDeferred(BOSS_TELEGRAPH_TIME, () => {
+        const half = (count - 1) / 2;
+        for (let i = -half; i <= half; i++) {
+          const a = ang + i * spread;
+          state.enemyBullets.push({
+            x: b.x + dx, y: b.y + 20, vx: Math.cos(a) * scaledBulletSpeed(speed), vy: Math.sin(a) * scaledBulletSpeed(speed),
+            radius: 5, color, damage: 1, fromBoss: true,
+          });
+        }
+      });
+    });
+  };
+}
+
 function pLaserSweep(color = "#ff5dff") {
   return (b) => {
     pushTelegraph({ kind: "line", x: b.x, y: b.y + 30, angle: Math.PI / 2 - 0.4, color, ttl: BOSS_TELEGRAPH_TIME });
@@ -1678,6 +1937,24 @@ function pCrossLasers() {
 
 // Each boss type: 3 phases, each with pattern array of { fire, cooldown }
 const BOSS_PATTERNS = {
+  // 九頭蛇艦(v21)— 雙砲塔扇形 + 分裂彈 + 追蹤魚雷;第三 phase 加召喚
+  hydra: [
+    [
+      { fire: pTwinFan("#5df2c8", 3, 0.16, 230), cooldown: 0.75 },
+      { fire: pSplitShot("#7dffdf", 1, 150), cooldown: 1.6 },
+    ],
+    [
+      { fire: pTwinFan("#5df2c8", 5, 0.11, 250), cooldown: 0.8 },
+      { fire: pTorpedoes("#b8fff0", 2, 170), cooldown: 1.8 },
+      { fire: pSplitShot("#7dffdf", 3, 160), cooldown: 1.7 },
+    ],
+    [
+      { fire: pTorpedoes("#b8fff0", 3, 190, 3.2, 1.9), cooldown: 1.6 },
+      { fire: pSplitShot("#7dffdf", 3, 175, 0.6, 8), cooldown: 1.4 },
+      { fire: pRing("#5df2c8", 16, 190), cooldown: 1.1 },
+      { fire: pSpawnAdds(2), cooldown: 2.6 },
+    ],
+  ],
   // 先鋒護衛 — 直瞄 + 散射，傳統壓制
   vanguard: [
     [
@@ -2618,11 +2895,36 @@ function updateBullets(delta, enemyDelta = delta) {
            (b.life === undefined || b.life > 0);
   });
 
+  const spawned = [];
   state.enemyBullets = state.enemyBullets.filter((b) => {
+    if (b.homing) { // v21 追蹤魚雷:朝最近玩家慢慢轉向,壽命到就散掉
+      b.life -= enemyDelta;
+      if (b.life <= 0) { spawnParticle(b.x, b.y, b.color); return false; }
+      const t = nearestPlayer(b);
+      const want = Math.atan2(t.y - b.y, t.x - b.x), cur = Math.atan2(b.vy, b.vx);
+      let diff = want - cur;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const na = cur + clamp(diff, -b.turn * enemyDelta, b.turn * enemyDelta);
+      const sp = Math.hypot(b.vx, b.vy);
+      b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp;
+    }
     b.x += b.vx * enemyDelta;
     b.y += b.vy * enemyDelta;
+    if (b.split) { // v21 分裂彈:時間到炸成一圈小彈
+      b.split.t -= enemyDelta;
+      if (b.split.t <= 0) {
+        for (let i = 0; i < b.split.count; i++) {
+          const a = (i / b.split.count) * Math.PI * 2 + (b.split.phase || 0);
+          spawned.push({ x: b.x, y: b.y, vx: Math.cos(a) * b.split.speed, vy: Math.sin(a) * b.split.speed, radius: 4, color: b.split.color || b.color, damage: 1, fromBoss: true });
+        }
+        spawnParticle(b.x, b.y, b.color);
+        return false;
+      }
+    }
     return b.x > -30 && b.x < WORLD.width + 30 && b.y > -30 && b.y < WORLD.height + 30;
   });
+  if (spawned.length) state.enemyBullets.push(...spawned);
 }
 
 function updateBeams(delta, enemyDelta = delta) {
@@ -3014,7 +3316,14 @@ function drawBackground() {
     ["#532013", "#2a0c08", "#100303"],
     ["#0d4338", "#062520", "#020e0a"],
   ];
-  const palette = skies[(stage - 1) % skies.length];
+  const deepSkies = [ // 🐙 深海潛航:越深越黑的海水
+    ["#0a4a63", "#05283a", "#02111a"],
+    ["#0d3a5a", "#071f36", "#030c17"],
+    ["#0b4744", "#062a2a", "#021111"],
+    ["#163454", "#0b1c34", "#040a15"],
+    ["#0b4436", "#05271d", "#020f0b"],
+  ];
+  const palette = (getSkin() === "deep" ? deepSkies : skies)[(stage - 1) % skies.length];
   const grad = ctx.createLinearGradient(0, 0, 0, WORLD.height);
   grad.addColorStop(0, palette[0]);
   grad.addColorStop(0.45, palette[1]);
@@ -3254,6 +3563,18 @@ function drawBullets() {
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
     ctx.fill();
+    if (b.split) { // 分裂彈:脈動外圈,提醒它會炸開
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.radius + 3 + Math.sin(performance.now() / 60) * 1.5, 0, Math.PI * 2); ctx.stroke();
+    } else if (b.homing) { // 追蹤魚雷:白色核心 + 尾跡
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(b.x, b.y, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = b.color || "#b8fff0";
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x - b.vx * 0.06, b.y - b.vy * 0.06); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   });
 }
 
@@ -3964,9 +4285,10 @@ function registerInput() {
   if (els.skinSelect) {
     const syncSkinCopy = () => {
       if (els.messageBody && state.scene === "menu") {
-        els.messageBody.textContent = getSkin() === "rock"
-          ? "擊碎隕石掉落寶物與武器，每 5 wave 出現巨型隕石 Boss。"
-          : "擊落敵機掉落寶物與武器，每 5 wave 出現 Boss。";
+        els.messageBody.textContent = ({
+          rock: "擊碎隕石掉落寶物與武器，每關第 5 波中 Boss、第 10 波巨型隕石 Boss。",
+          deep: "潛入深海，擊退水母、燈籠魚與魟魚群，每關第 5 波中 Boss、第 10 波深海巨獸。",
+        })[getSkin()] || "擊落敵機掉落寶物與武器，每關第 5 波中 Boss、第 10 波 STAGE BOSS。";
       }
     };
     els.skinSelect.addEventListener("change", () => { setSkin(els.skinSelect.value); syncSkinCopy(); });

@@ -2,7 +2,7 @@
 //   CORE_ASSETS 裡有 "./index.html" ⇒ install 存進 redirected:true 的回應 ⇒ 導覽拿到它就被瀏覽器拒絕。
 //   改:名單拔它、退路 caches.match("./")、addAll → 逐一 add+catch、runtime 只存 ok 且 !redirected 的回應。
 //   補丁:skills repo static-pwa-ship/patches/patch-sw-index.mjs --cf。正式站=CF Pages 專案 flyshoot(flyshoot.pages.dev)。
-const CACHE_NAME = "thunder-force-pwa-v20";
+const CACHE_NAME = "thunder-force-pwa-v21";
 const CORE_ASSETS = [
   "./",
   "./styles.css",

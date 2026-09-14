@@ -153,6 +153,41 @@ const startGame = async (page) => { await ev(page, () => document.getElementById
   await ctx.close();
 }
 
+// ───────── Q(v21)第三皮膚 deep + 第六 Boss hydra
+{
+  const { ctx, page } = await fresh({ width: 1280, height: 800 }, { seen: true });
+  const sp = await ev(page, () => { const want = ["enemy_basic_deep", "enemy_elite_deep", "enemy_formation_deep"]; BOSS_TYPES.forEach((t) => ["mech", "rock", "deep"].forEach((k) => want.push("boss_" + t.id + "_" + k))); return { opt: !!document.querySelector('#skinSelect option[value="deep"]'), missing: want.filter((k) => !sprites[k]), total: want.length, types: BOSS_TYPES.length, hydra: BOSS_TYPES.some((t) => t.id === "hydra"), patterns: !!BOSS_PATTERNS.hydra && BOSS_PATTERNS.hydra.length === 3, rush: BOSS_RUSH_TYPES.length }; });
+  ok(sp.opt && sp.missing.length === 0 && sp.types === 6 && sp.hydra && sp.patterns && sp.rush === 5, `Q 深海選項 + ${sp.total} 張 sprite 全預生成;BOSS_TYPES 6 種、hydra 三 phase、Boss Rush 仍 5 隻`, JSON.stringify(sp));
+  await page.selectOption("#skinSelect", "deep");
+  const sk = await ev(page, () => ({ skin: getSkin(), ls: localStorage.getItem("tf-skin"), body: document.getElementById("messageBody").textContent }));
+  ok(sk.skin === "deep" && sk.ls === "deep" && /深海/.test(sk.body), "Q 選深海皮膚 ⇒ 存起來、選單文案換", JSON.stringify(sk));
+  await page.screenshot({ path: OUT + "v21-deep-menu.png" });
+  await startGame(page); await page.waitForTimeout(300);
+  const hy = await ev(page, async () => { state.players[0].grace = 0; state.players[0].invincible = 99; startBossWarning("hydra", {}); spawnBoss("hydra", false); const b = state.boss; b.arrived = true; await new Promise((r) => setTimeout(r, 4500)); const eb = state.enemyBullets; return { name: b.name, type: b.type, total: eb.length, split: eb.filter((x) => x.split).length, homing: eb.filter((x) => x.homing).length, alive: !!state.boss, sprite: !!sprites["boss_hydra_deep"], enemySprite: (() => { const s = skinSprite("enemy_basic"); return !!s; })() }; });
+  ok(hy.type === "hydra" && /九頭海怪/.test(hy.name), "Q 深海皮膚下 hydra 名字「九頭海怪」", JSON.stringify(hy));
+  ok(hy.total > 5 && hy.alive && hy.enemySprite, `Q hydra 招式 4.5 秒放出 ${hy.total} 顆彈(其中分裂彈 ${hy.split}、魚雷 ${hy.homing}),沒有例外`, JSON.stringify(hy));
+  await page.screenshot({ path: OUT + "v21-deep-hydra.png" });
+  const spl = await ev(page, async () => { state.enemyBullets = [{ x: 240, y: 300, vx: 0, vy: 40, radius: 9, color: "#7dffdf", damage: 1, fromBoss: true, split: { t: 0.3, count: 6, speed: 120, color: "#7dffdf" } }]; await new Promise((r) => setTimeout(r, 650)); return { n: state.enemyBullets.filter((b) => !b.split).length }; });
+  ok(spl.n >= 6, `Q 分裂彈 0.3s 後變 ${spl.n} 顆小彈`, JSON.stringify(spl));
+  const tor = await ev(page, async () => { const p = state.players[0]; p.x = 400; p.y = 700; state.enemyBullets = [{ x: 80, y: 200, vx: 0, vy: 120, radius: 6, color: "#b8fff0", damage: 1, fromBoss: true, homing: true, turn: 2.5, life: 4 }]; await new Promise((r) => setTimeout(r, 800)); const b = state.enemyBullets[0]; return b ? { vx: Math.round(b.vx), vy: Math.round(b.vy), x: Math.round(b.x) } : null; });
+  ok(tor && tor.vx > 30, `Q 追蹤魚雷 0.8s 後朝右邊的玩家轉向(vx ${tor && tor.vx})`, JSON.stringify(tor));
+  const life = await ev(page, async () => { state.enemyBullets = [{ x: 240, y: 200, vx: 0, vy: 10, radius: 6, color: "#b8fff0", damage: 1, fromBoss: true, homing: true, turn: 2.5, life: 0.3 }]; await new Promise((r) => setTimeout(r, 600)); return state.enemyBullets.length; });
+  ok(life === 0, "Q 魚雷壽命到就散掉", String(life));
+  const cyc = await ev(page, () => { state.boss = null; state.stage = 5; spawnBoss(null, true); const mid = state.boss.type; const midName = state.boss.name; state.boss = null; state.stage = 6; spawnBoss(null, false); const full = state.boss.type; state.boss = null; state.stage = 1; return { mid, midName, full }; });
+  ok(cyc.mid === "hydra" && cyc.full === "hydra" && /中 BOSS/.test(cyc.midName), "Q 第 5 關中 Boss 預告 = hydra、第 6 關 STAGE BOSS = hydra", JSON.stringify(cyc));
+  const mech = await ev(page, () => { setSkin("mech"); state.boss = null; spawnBoss("hydra", false); state.boss.arrived = true; return { n: state.boss.name, rockName: (setSkin("rock"), bossNameFor(BOSS_TYPES[5])), back: (setSkin("mech"), getSkin()) }; });
+  ok(/九頭蛇艦/.test(mech.n) && /裂變雙子隕/.test(mech.rockName) && mech.back === "mech", "Q 機械皮膚「九頭蛇艦」、隕石皮膚「裂變雙子隕」", JSON.stringify(mech));
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: OUT + "v21-mech-hydra.png" });
+  await ev(page, () => { setSkin("rock"); });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: OUT + "v21-rock-hydra.png" });
+  await ev(page, () => { setSkin("deep"); state.boss = null; for (let i = 0; i < 3; i++) { spawnEnemy({ x: 120 + i * 120, y: 120, elite: i === 1 }); } spawnFormation(); });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: OUT + "v21-deep-enemies.png" });
+  await ctx.close();
+}
+
 ok(errors.length === 0, "零 pageerror / console error", errors.slice(0, 3).join(" || "));
 console.log(`${fail ? "🔴" : "🟢"} ${pass} 過 / ${fail} 失敗`);
 await browser.close();

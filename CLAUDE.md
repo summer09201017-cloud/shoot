@@ -24,6 +24,12 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 | `run.bat` | Windows 本機 server 啟動腳本（Python → py launcher → PowerShell HttpListener fallback） |
 | `assets/` | icons (192/512/apple-touch/svg) |
 
+## 三皮膚 + 六 Boss（v21，2026-09-15；使用者拍板 Q「第三皮膚或新 Boss」兩個都做）
+
+- **第三套皮膚 `deep`（🐙 深海潛航）**：`SKINS = ["mech","rock","deep"]`（`getSkin/setSkin` 用它驗證）；`drawDeepEnemyArt`（basic=水母 / elite=燈籠魚 / formation=魟魚）、`drawDeepBossArt`（六隻：巨鎧蟹 / 劍旗魚 / 深海巨鯨 / 海蛇 / 烈焰水母 / 九頭海怪）；`buildSprites` 對 `BOSS_TYPES` 全表生成 `_mech/_rock/_deep` 三套；`drawBackground` 深海皮膚換 `deepSkies` 色盤；Boss 名字走 `bossNameFor(type)`（`name/rockName/deepName`）；選單文案 `syncSkinCopy` 三段。
+- **第六隻 Boss `hydra`（九頭蛇艦 / 裂變雙子隕 / 九頭海怪，色 #5df2c8）**：`BOSS_TYPES` 第 6 筆 ⇒ 第 6 關 STAGE BOSS、第 5 關中 Boss 預告版（(stage-1+1)%6）；`BOSS_PATTERNS.hydra` 三 phase 用三個新 helper：`pTwinFan`（左右砲口各瞄一次）、`pSplitShot`（敵彈帶 `split:{t,count,speed}`，updateBullets 時間到炸成一圈）、`pTorpedoes`（敵彈帶 `homing:true, turn, life`，updateBullets 朝 `nearestPlayer` 轉向、壽命到散掉）；drawBullets 對 split 畫脈動外圈、homing 畫白核 + 尾跡。`BOSS_RUSH_TYPES` 維持五隻（計時榜可比）。
+- 驗收：`scripts/verify-behaviour.mjs` Q 段（皮膚選項 / 21 張 sprite 都在 / 名字 / hydra 4.5 秒放彈無例外 / 分裂彈變 6 顆 / 魚雷轉向 / 第 5 關中 Boss 與第 6 關 Boss 都是 hydra）。
+
 ## 雙皮膚系統（2026-07-10）
 
 - 開戰前選單「戰場」select（`#skinSelect`）：`mech`（✈️ 機械戰機，原版）/ `rock`（☄️ 隕石風暴）
@@ -57,7 +63,7 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - **xlsx-style：只改 .js / .css / .html，本機檔案 = 雲端真理**（無 build step）
 - **沒有框架**：不要引入 React/Vue/Vite。所有 DOM 操作用 `document.getElementById($())`，CSS 修改用 className
 - **不寫測試**：靠手動測 + console
-- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v20）讓舊 cache 失效
+- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v21）讓舊 cache 失效
 - **🏷 版本兩件套(2026-09-15,v19;使用者「版本號與簡歷打不開」)**:選單最底 `<details id="verFold">`(summary 寫本版 vN + 日期,`#verTag` 白話簡歷、前幾版接到 v7)+ 右下角 `#appVerBadge` 可點(點了展開簡歷並捲到它;戰鬥中選單收起就先提示)。**改版四處一起改**:`sw.js` CACHE_NAME / summary vN / verTag 第一行 vN+日期 / 前幾版接上一版 —— `node scripts/check-vertag.mjs` 在守(本 repo 唯一的自動檢查,零依賴)。
 - **手機版選單**：`@media (max-width: 980px)` 時 `body[data-scene="menu"] .canvas-wrap { display: none }`，因為 `.hud-panel` 的 `backdrop-filter: blur` 會建立 fixed-positioning containing block，導致 `position:fixed` modal 被綁住。所以我們改成「選單時直接隱藏 canvas」而非 modal overlay
 - **deltaTime 在 slow-mo 時降到 0.65×**，但 audio / parallax 用真實 delta 不縮放
