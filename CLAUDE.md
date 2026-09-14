@@ -139,7 +139,7 @@ B 級：#15 / #16 / #17 **已於 v20（2026-09-15）完成**，見下方「v20 �
 | M 中 Boss + 腳本化波次 | `STAGE_SCRIPT[1..10]`（label/spawnMul/formationEvery/eliteMul）由 `stageScript()` 依 `waveInStage()` 取；第 5 波 `startBossWarning(null,{mid:true})` ⇒ `spawnBoss(type, mid)`：型別 = 下一關 STAGE BOSS（(stage-1+1)%5）、血 ×`MID_BOSS_HP_MUL`(0.42)、radius 44、只有 2 phase 不 ENRAGED、獎勵 ×0.4、**不算 meta.bossKills / Boss 成就**（`state.midBossKillsRun` 另計）；第 10 波仍是原本的 STAGE BOSS | spawnEnemy 上方 / startBossWarning / spawnBoss / bossUpdate / bossDefeated |
 | N 機體特殊技 | `SKILLS = { slow, deflect, charge }`，CHARACTERS 各帶 `skill`（alpha/phantom=slow、blade=deflect、fortress/tempest=charge；phantom cd16 dur4、tempest cd11）；P1 按 **C**、P2 按 **R**、手機 `#skillButton`、手把 A 鈕；`useSkill` → slow 設 `state.timeWarp={t,factor:.35}`（update() 敵方那一側吃 warpDelta：updateEnemies/updateBoss/updateTelegraphs/updateDeferred/敵彈/敵方光束）、deflect 護罩期間 handleCollisions 把貼身敵彈轉成己方子彈、charge 蓄力 0.5s 後 `fireChargeCannon` 推一道 width 96 的 fromPlayer 光束；`syncSkillHud` 更新 DOM 鈕（READY / ON / Ns），canvas HUD 左下也印 | SKILLS / useSkill / fireChargeCannon / updatePlayers / handleCollisions |
 
-驗收：`node scripts/check-vertag.mjs`（版號四處）+ 本機/線上 Playwright 行為驗收 37 項（腳本在 skills 交接快照 `shoot-v20-test.mjs`；含：第一屏、比例 3:5、教學凍住/無敵不倒數、減速中敵彈 0.5s 只走 35px、中 Boss 血 126 vs 300、無傷 ×2、炸彈 3 顆 +1500、兩個打點、音量、沉浸 800/800、護罩轉彈、大砲 144 傷害）。
+驗收：`node scripts/check-vertag.mjs`（版號四處）+ 本機/線上 Playwright 行為驗收 37 項（`node scripts/verify-behaviour.mjs [url]`,先 `python -m http.server 8011` 或直接傳線上網址；含：第一屏、比例 3:5、教學凍住/無敵不倒數、減速中敵彈 0.5s 只走 35px、中 Boss 血 126 vs 300、無傷 ×2、炸彈 3 顆 +1500、兩個打點、音量、沉浸 800/800、護罩轉彈、大砲 144 傷害）。
 
 ## localStorage key 一覽
 
