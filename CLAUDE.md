@@ -57,7 +57,8 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - **xlsx-style：只改 .js / .css / .html，本機檔案 = 雲端真理**（無 build step）
 - **沒有框架**：不要引入 React/Vue/Vite。所有 DOM 操作用 `document.getElementById($())`，CSS 修改用 className
 - **不寫測試**：靠手動測 + console
-- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v18）讓舊 cache 失效
+- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v19）讓舊 cache 失效
+- **🏷 版本兩件套(2026-09-15,v19;使用者「版本號與簡歷打不開」)**:選單最底 `<details id="verFold">`(summary 寫本版 vN + 日期,`#verTag` 白話簡歷、前幾版接到 v7)+ 右下角 `#appVerBadge` 可點(點了展開簡歷並捲到它;戰鬥中選單收起就先提示)。**改版四處一起改**:`sw.js` CACHE_NAME / summary vN / verTag 第一行 vN+日期 / 前幾版接上一版 —— `node scripts/check-vertag.mjs` 在守(本 repo 唯一的自動檢查,零依賴)。
 - **手機版選單**：`@media (max-width: 980px)` 時 `body[data-scene="menu"] .canvas-wrap { display: none }`，因為 `.hud-panel` 的 `backdrop-filter: blur` 會建立 fixed-positioning containing block，導致 `position:fixed` modal 被綁住。所以我們改成「選單時直接隱藏 canvas」而非 modal overlay
 - **deltaTime 在 slow-mo 時降到 0.65×**，但 audio / parallax 用真實 delta 不縮放
 - **Telegraph 顏色** = pattern 子彈顏色（紅系給強攻擊）

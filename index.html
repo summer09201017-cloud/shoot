@@ -150,6 +150,28 @@
             <textarea id="replayImport" placeholder="貼上錄影 JSON 後按匯入" rows="3"></textarea>
             <button id="importReplayButton" class="sound-button">匯入並重播</button>
           </section>
+
+          <!-- 🏷 版本號 + 改版簡歷(艦隊鐵則⑦「版本兩件套」;2026-09-15 使用者:「版本號與簡歷打不開」——
+               以前只有右下角一顆 10 秒就淡出、也點不了的徽章,沒有簡歷)。白話寫給家長/老師,本版在最前、最舊在最後。
+               ★ 改版四處一起改:sw.js CACHE_NAME / 這裡 summary 的 vN / verTag 第一行 vN + 日期 / 前幾版接上一版(scripts/check-vertag.mjs 在守)。 -->
+          <details class="ver-fold" id="verFold">
+            <summary>版本 v19(2026-09-15)・看看前幾版做了什麼</summary>
+            <p id="verTag" class="ver-tag">
+              版本 v19(2026-09-15)・🏷 <b>版本號與改版簡歷看得到、點得開了</b>——選單最底多了這一段;右下角那顆版號徽章以前 10 秒就消失、也點不了,現在點一下就展開這份簡歷。<br>
+              前幾版:v18 🩹 <b>修好「裝成 App 打開就無法連上」的隱藏地雷</b>——網站主機會把 index.html 這個網址自動轉到首頁,而離線快取名單裡偏偏列著 index.html,存到的是被轉址過的一份,從主畫面開 App 時瀏覽器拒收;現在名單只認首頁、一個檔一個檔存(2026-09-14)
+              ・v17 ⛶ <b>手機放大鈕</b>——右上角一顆,把瀏覽器網址列收掉、整個螢幕拿來玩(2026-09-07)
+              ・v16 🏷 右下角版號徽章:顯示這台裝置實際執行中的版本(2026-08-31)
+              ・v15 📡 接上匿名使用統計(只數「開了幾次、停留多久」,零個資)(2026-08-15)
+              ・v14 ☄️ <b>雙皮膚</b>——開戰前可選「✈️ 機械戰機(原版)/ ☄️ 隕石風暴」,純視覺換皮,玩法、排行、錄影全共用(2026-07-10)
+              ・v13 👑 <b>Boss Rush</b>(連戰 5 隻 Boss、計時排行)+ 錄影改 5 槽、附縮圖(2026-05-08)
+              ・v12 🎨 像素風機體與敵機、8-bit 配樂每關不同調式、冰凍/燃燒/感電子彈(商店買)、打成就解鎖新機體 Phantom / Tempest、今日挑戰獨立排行(2026-05-08)
+              ・v11 📱 手機選單修正;更新改「先抓網路」,改版後不再卡在舊版(2026-05-08)
+              ・v10 ⚡ Boss 出招前有紅色預告線、過關結算獎勵、金幣 Continue 復活、低血量慢動作、4 個武器槽切換、火力 1~20 格(2026-05-08)
+              ・v9 內部調整,沒有留下單獨紀錄(2026-05 初)
+              ・v8 📱 手機在選單與輸入名字時改成整頁面板(2026-05-02)
+              ・v7 🚀 首發:垂直捲軸射擊 PWA——Boss、連擊、副武器(散彈/雷射/追蹤)、僚機、商店、成就、雙人協力、Replay(2026-05-01)
+            </p>
+          </details>
         </div>
 
         <button id="installButton" class="install-button" hidden>安裝到裝置</button>
@@ -245,18 +267,39 @@
     });
   })();
 </script>
-<div id="appVerBadge" style="position:fixed;right:6px;bottom:4px;font-size:11px;line-height:1;opacity:.55;z-index:2147483000;pointer-events:none;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);font-family:system-ui,sans-serif"></div>
+<div id="appVerBadge" role="button" tabindex="0" title="點一下看改版簡歷" style="position:fixed;right:6px;bottom:4px;font-size:11px;line-height:1;opacity:.55;z-index:2147483000;pointer-events:auto;cursor:pointer;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);font-family:system-ui,sans-serif;padding:6px 4px"></div>
     <script>
       /* 🏷️ appVerBadgeFade（0828）：版號徽章是 position:fixed 在右下角，實測會蓋住大廳卡片、
-         遊戲的「難度 / 開始比賽」按鈕——pointer-events:none 只讓「點擊」穿過去，字還是被蓋著。
-         做法：10 秒後淡出。要看版本就重新整理，平常不擋畫面。 */
+         遊戲的「難度 / 開始比賽」按鈕——做法：10 秒後淡出。要看版本就重新整理,平常不擋畫面。
+         2026-09-15(v19,使用者「版本號與簡歷打不開」):徽章改成點得到——點一下展開選單最底的改版簡歷(#verFold)並捲到它;
+         滑鼠移上去就不淡出;戰鬥中選單是收起的,點了先提示「回主選單再看」。 */
       ;(function () {
         var b = document.getElementById('appVerBadge')
         if (!b) return
         b.style.transition = 'opacity .8s'
+        var hovered = false, hidden = false
+        b.addEventListener('pointerenter', function () { hovered = true; b.style.opacity = '.95' })
+        b.addEventListener('pointerleave', function () { hovered = false })
+        function openChangelog() {
+          var d = document.getElementById('verFold')
+          var card = document.getElementById('messageCard')
+          if (!d) return
+          if (card && (card.hidden || card.offsetParent === null)) {
+            var old = b.textContent
+            b.textContent = '🏷️ 改版簡歷在主選單最底(戰鬥結束或按「放棄回主選單」再看)'
+            setTimeout(function () { b.textContent = old }, 3500)
+            return
+          }
+          d.open = true
+          try { d.scrollIntoView({ block: 'center', behavior: 'smooth' }) } catch (e) { d.scrollIntoView() }
+          var s = d.querySelector('summary'); if (s && s.focus) s.focus({ preventScroll: true })
+        }
+        b.addEventListener('click', openChangelog)
+        b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openChangelog() } })
         setTimeout(function () {
+          if (hovered) return
           b.style.opacity = '0'
-          setTimeout(function () { b.style.display = 'none' }, 900)
+          setTimeout(function () { if (!hovered) { hidden = true; b.style.display = 'none' } }, 900)
         }, 10000)
       })()
     </script>

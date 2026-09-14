@@ -3615,8 +3615,14 @@ function hideMessage() { els.message.hidden = true; }
 // =====================================================================
 
 function setScene(s) {
+  const prev = state.scene;
   state.scene = s;
   document.body.dataset.scene = s;
+  // 📱 手機(≤980px 疊版):選單態把 canvas-wrap display:none,按「開始戰鬥」時頁面還停在選單捲到的位置(選單在下面),
+  // 畫布一出現就整個在螢幕上方 —— 0915 實測直向只露出底下 72px、橫向完全在畫面外。進戰鬥就捲回最上面。
+  if (s === "play" && prev !== "paused" && typeof window !== "undefined" && window.scrollY > 0) {
+    requestAnimationFrame(() => { try { window.scrollTo({ top: 0, left: 0 }); } catch (_) { window.scrollTo(0, 0); } });
+  }
 }
 
 function togglePause() {

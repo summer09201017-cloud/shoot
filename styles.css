@@ -917,3 +917,31 @@ body[data-scene="name-entry"] .pause-button {
     height: 52px;
   }
 }
+
+/* 🏷 版本兩件套(2026-09-15,v19):選單最底的「版本 vN・看看前幾版做了什麼」摺疊列 + 改版簡歷。
+   預設收合,點標題才展開;展開後最高佔半個畫面並可捲,不會把上面的鈕擠出畫面(撞球 0907 實玩教訓)。 */
+.ver-fold {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(102, 228, 255, 0.18);
+}
+.ver-fold summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  list-style: none;
+}
+.ver-fold summary::-webkit-details-marker { display: none; }
+.ver-fold summary::before { content: "▸ "; }
+.ver-fold[open] summary::before { content: "▾ "; }
+.ver-fold summary:hover, .ver-fold summary:focus-visible { color: var(--text-main); }
+.ver-fold .ver-tag {
+  margin: 6px 0 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: var(--text-dim);
+  opacity: 0.92;
+}
+.ver-fold .ver-tag b { color: var(--text-main); }
