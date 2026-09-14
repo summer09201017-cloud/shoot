@@ -57,7 +57,7 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - **xlsx-style：只改 .js / .css / .html，本機檔案 = 雲端真理**（無 build step）
 - **沒有框架**：不要引入 React/Vue/Vite。所有 DOM 操作用 `document.getElementById($())`，CSS 修改用 className
 - **不寫測試**：靠手動測 + console
-- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v13）讓舊 cache 失效
+- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v18）讓舊 cache 失效
 - **手機版選單**：`@media (max-width: 980px)` 時 `body[data-scene="menu"] .canvas-wrap { display: none }`，因為 `.hud-panel` 的 `backdrop-filter: blur` 會建立 fixed-positioning containing block，導致 `position:fixed` modal 被綁住。所以我們改成「選單時直接隱藏 canvas」而非 modal overlay
 - **deltaTime 在 slow-mo 時降到 0.65×**，但 audio / parallax 用真實 delta 不縮放
 - **Telegraph 顏色** = pattern 子彈顏色（紅系給強攻擊）
@@ -90,6 +90,10 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - **音樂用 `setInterval`**，可能在分頁背景時產生時序漂移；`visibilitychange` 監聽會 togglePause
 - **手機版 backdrop-filter 陷阱**：給 `.hud-panel` 加 `position: fixed` 子元素時要先取消 backdrop-filter，否則 fixed 變相對於 hud-panel
 - **service worker 改了要 bump cache name**，否則 PWA 用舊 cache 直到 SW 自然更新（以前是 cache-first，現在 network-first 已經沒這問題）
+- **`CORE_ASSETS` 不放 `./index.html`**(2026-09-14,v17→v18 全艦隊修):CF Pages 把 `/index.html` 308 到 `/`,快取存到 redirected 回應 ⇒ 裝成 App 打開就 ERR_FAILED(3D-Chess 幻影版實錘)。
+  名單只放 `./`;runtime put 守 `ok && !redirected`;離線退路 `caches.match("./")`。補丁:skills repo `static-pwa-ship/patches/patch-sw-index.mjs --cf`;線上重演 `scripts/check-sw-nav-fleet.mjs`。
+- **部署**:正式站是 **CF Pages 專案 `flyshoot`**(https://flyshoot.pages.dev,大廳卡片指它;舊站 flyshoot.netlify.app):`npx wrangler pages deploy <只含 index.html/app.js/styles.css/sw.js/manifest/assets 的目錄> --project-name flyshoot --branch main`,部署完 curl `/sw.js` 看版號。
+  ⚠ `hfpc-shooting3d.pages.dev` 是**另一款遊戲**(10m 氣步槍 3D),不是本 repo。
 
 ## 開發/測試循環
 

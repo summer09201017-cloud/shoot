@@ -1,7 +1,10 @@
-const CACHE_NAME = "thunder-force-pwa-v17";
+// v18(2026-09-14):🩹 全艦隊修「裝成 App 打開就 ERR_FAILED」(3D-Chess 幻影版實錘):CF Pages 把 /index.html 308 轉到 /,
+//   CORE_ASSETS 裡有 "./index.html" ⇒ install 存進 redirected:true 的回應 ⇒ 導覽拿到它就被瀏覽器拒絕。
+//   改:名單拔它、退路 caches.match("./")、addAll → 逐一 add+catch、runtime 只存 ok 且 !redirected 的回應。
+//   補丁:skills repo static-pwa-ship/patches/patch-sw-index.mjs --cf。正式站=CF Pages 專案 flyshoot(flyshoot.pages.dev)。
+const CACHE_NAME = "thunder-force-pwa-v18";
 const CORE_ASSETS = [
   "./",
-  "./index.html",
   "./styles.css",
   "./app.js",
   "./manifest.webmanifest",
@@ -13,7 +16,7 @@ const CORE_ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS))
+    caches.open(CACHE_NAME).then((cache) => Promise.all(CORE_ASSETS.map((u) => cache.add(u).catch(() => null))))
   );
   self.skipWaiting();
 });
@@ -46,11 +49,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          if (response && response.ok && !response.redirected) {   // 轉址過的回應不進快取(導覽拿到它 = ERR_FAILED)
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
           return response;
         })
-        .catch(() => caches.match(event.request).then((c) => c || caches.match("./index.html")))
+        .catch(() => caches.match(event.request).then((c) => c || caches.match("./")))
     );
     return;
   }
@@ -61,11 +66,13 @@ self.addEventListener("fetch", (event) => {
       if (cached) return cached;
       return fetch(event.request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          if (response && response.ok && !response.redirected) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
           return response;
         })
-        .catch(() => caches.match("./index.html"));
+        .catch(() => caches.match("./"));
     })
   );
 });
