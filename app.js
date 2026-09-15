@@ -43,6 +43,7 @@ const els = {
   skillBtn: $("skillButton"), skillIcon: $("skillIcon"), skillCd: $("skillCd"),
   tutorialOverlay: $("tutorialOverlay"), tutorialGo: $("tutorialGo"), tutorialBtn: $("tutorialButton"),
   bgmVolume: $("bgmVolume"), sfxVolume: $("sfxVolume"),
+  questCard: $("questCard"), questList: $("questList"), questSub: $("questSub"), // J 今日任務卡
 };
 
 // =====================================================================
@@ -132,6 +133,7 @@ Object.assign(STORAGE, {
   tutorialSeen: "tf-tutorial-seen", // B 第一次玩教學看過了
   volBgm: "tf-vol-bgm",             // G 音樂 0~3
   volSfx: "tf-vol-sfx",             // G 音效 0~3
+  quests: "tf-quests-v1",           // J 今日任務(v22):{day, ids×3, progress, done, earned},換日重置
 });
 const MAX_REPLAY_SLOTS = 5;
 
@@ -288,6 +290,125 @@ function unlockAch(id) {
   saveMeta();
   spawnFloatingText(WORLD.width / 2, 130, `成就：${a ? a.name : id}`, "#ffd86c", 22);
   audio.victory();
+}
+
+// =====================================================================
+//  J 今日任務(v22,2026-09-15;使用者拍板「每日任務三則給金幣」,回訪動機)
+//  每天從 QUEST_POOL 用日期種子挑 3 則(同一天大家同三則;私有 PRNG,不動全域 rand ⇒ 今日挑戰的種子不漂)。
+//  進度存 tf-quests-v1 {day, ids, progress, done, earned},換日重置;做到的當下就把金幣加進 meta.credits。
+//  計數點:destroyEnemy / bossDefeated / bumpCombo / collectLoot / advanceWave / useSkill / endGame(深海一場)。重播不算。
+// =====================================================================
+
+const QUEST_POOL = [
+  { id: "kill30",     icon: "🎯", name: "擊破 30 個目標",           desc: "今天累計,不用一場打完",              goal: 30, mode: "sum", reward: 50 },
+  { id: "bossNoBomb", icon: "💣", name: "不用炸彈打倒 STAGE BOSS",  desc: "第 10 波 Boss 倒下前一顆炸彈都別丟",  goal: 1,  mode: "sum", reward: 150 },
+  { id: "combo50",    icon: "🔥", name: "連擊 50",                  desc: "單場最高連擊到 50",                  goal: 50, mode: "max", reward: 100 },
+  { id: "loot15",     icon: "🎁", name: "撿 15 個寶物",             desc: "今天累計",                           goal: 15, mode: "sum", reward: 50 },
+  { id: "flawless2",  icon: "★",  name: "一場無傷 2 波",            desc: "單場有 2 波一下都沒被打到",           goal: 2,  mode: "max", reward: 100 },
+  { id: "skill5",     icon: "✨", name: "用特殊技 5 次",            desc: "按 C 或 SKILL 鈕,今天累計",          goal: 5,  mode: "sum", reward: 50 },
+  { id: "stage2",     icon: "🚀", name: "打到第 2 關",              desc: "撐過第 10 波 STAGE BOSS",            goal: 2,  mode: "max", reward: 100 },
+  { id: "deep1",      icon: "🐙", name: "用深海潛航玩一場",          desc: "戰場選 🐙 深海潛航,玩 20 秒以上",     goal: 1,  mode: "sum", reward: 50 },
+];
+const QUESTS_PER_DAY = 3;
+
+// 私有小 PRNG(FNV-1a 種子 + mulberry32):挑題不能碰全域 rngState
+function pickDailyQuests(day) {
+  let h = 2166136261;
+  for (let i = 0; i < day.length; i++) { h ^= day.charCodeAt(i); h = Math.imul(h, 16777619); }
+  let s = (h ^ 0x5bd1e995) >>> 0;
+  const next = () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const ids = QUEST_POOL.map((q) => q.id);
+  for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(next() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+  return ids.slice(0, QUESTS_PER_DAY);
+}
+const freshQuests = (day) => ({ day, ids: pickDailyQuests(day), progress: {}, done: {}, earned: 0 });
+let quests = (() => {
+  const saved = loadJSON(STORAGE.quests, null);
+  const day = todayKey();
+  if (saved && saved.day === day && Array.isArray(saved.ids) && saved.ids.length === QUESTS_PER_DAY) {
+    saved.progress = saved.progress || {}; saved.done = saved.done || {}; saved.earned = saved.earned || 0;
+    return saved;
+  }
+  return freshQuests(day);
+})();
+function saveQuests() { saveJSON(STORAGE.quests, quests); }
+// 換日(頁面開著跨午夜、App 昨天沒關)⇒ 換三則、進度歸零。回傳有沒有換
+function ensureQuestsFresh() {
+  const day = todayKey();
+  if (quests.day === day) return false;
+  quests = freshQuests(day);
+  saveQuests();
+  renderQuests();
+  return true;
+}
+const questById = (id) => QUEST_POOL.find((q) => q.id === id);
+const questActive = (id) => quests.ids.includes(id) && !quests.done[id];
+const questsAllDone = () => quests.ids.every((id) => quests.done[id]);
+const questsRemaining = () => quests.ids.filter((id) => !quests.done[id]).length;
+
+// 進度推進:sum = 今天累加(擊破/撿寶/特殊技/一場),max = 取單場最高(連擊/無傷波/關卡)。重播不算、已完成不再動
+function questProgress(id, value) {
+  if (state.replayPlaying || !questActive(id)) return;
+  const q = questById(id);
+  if (!q) return;
+  ensureQuestsFresh();
+  if (!questActive(id)) return;
+  const cur = quests.progress[id] || 0;
+  const next = q.mode === "max" ? Math.max(cur, value) : cur + value;
+  if (next === cur) return;
+  quests.progress[id] = Math.min(next, q.goal);
+  if (next >= q.goal) questComplete(q);
+  else saveQuests();
+  if (state.scene === "menu") renderQuests(); // 戰鬥中卡片是藏著的,回選單(refreshMenuPanels)再畫
+}
+const questBump = (id, n = 1) => questProgress(id, n);
+const questMax = (id, v) => questProgress(id, v);
+
+function questComplete(q) {
+  quests.done[q.id] = Date.now();
+  quests.earned += q.reward;
+  meta.credits += q.reward;
+  saveMeta();
+  saveQuests();
+  state.questsDoneRun.push(q.id);
+  spawnFloatingText(WORLD.width / 2, 170, `📅 任務完成:${q.name}`, "#ffd86c", 20);
+  spawnFloatingText(WORLD.width / 2, 196, `+${q.reward} 金幣`, "#8cffbf", 18);
+  if (questsAllDone()) spawnFloatingText(WORLD.width / 2, 226, "✅ 今日任務全數完成!", "#9afcff", 18);
+  audio.victory();
+  syncHud();
+}
+
+// 距下次換題(本地午夜)還多久,寫在卡片副標
+function questResetText() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const mins = Math.max(1, Math.round((next - now) / 60000));
+  return mins >= 60 ? `${Math.floor(mins / 60)} 小時後換題` : `${mins} 分鐘後換題`;
+}
+
+function renderQuests() {
+  if (!els.questList) return;
+  els.questList.replaceChildren();
+  quests.ids.forEach((id) => {
+    const q = questById(id);
+    if (!q) return;
+    const done = !!quests.done[id];
+    const cur = done ? q.goal : Math.min(quests.progress[id] || 0, q.goal);
+    const row = document.createElement("div");
+    row.className = "quest-row" + (done ? " is-done" : "");
+    row.dataset.quest = id;
+    row.innerHTML = `<div class="quest-icon">${done ? "✦" : q.icon}</div>
+      <div class="quest-main"><strong>${q.name}</strong><small>${done ? "完成!金幣已入帳" : q.desc}</small>
+        <div class="quest-meter"><div class="quest-fill" style="width:${Math.round((cur / q.goal) * 100)}%"></div></div></div>
+      <div class="quest-side"><b>${cur} / ${q.goal}</b><em>+${q.reward} 💰</em></div>`;
+    els.questList.append(row);
+  });
+  if (els.questSub) {
+    els.questSub.textContent = questsAllDone()
+      ? `✅ 今日三則全部完成,共 +${quests.earned} 金幣・${questResetText()}`
+      : `完成給金幣・還剩 ${questsRemaining()} 則・${questResetText()}`;
+  }
+  if (els.questCard) els.questCard.classList.toggle("is-all-done", questsAllDone());
 }
 
 // =====================================================================
@@ -1236,6 +1357,7 @@ const state = {
   bombCashout: 0,        // E 結算炸彈換分
   midBossKillsRun: 0,    // M 本場中 Boss 擊破數
   tutorialOpen: false,   // B 教學卡開著 ⇒ 遊戲暫停
+  questsDoneRun: [],     // J 本場完成的今日任務 id(結算畫面用)
 };
 
 let lastTimestamp = 0;
@@ -2220,6 +2342,7 @@ function spawnLoot(x, y, opts = {}) {
 
 function collectLoot(p, item) {
   state.lootCollected += 1;
+  questBump("loot15"); // J
   const stackPower = () => {
     p.power = clamp(p.power + 1, 1, POWER_CAP);
     if (p.power >= 10) unlockAch("max-power");
@@ -2319,6 +2442,7 @@ function destroyEnemy(enemy, bombed = false) {
   state.score += earned;
   bumpCombo();
   state.enemyKills += 1;
+  questBump("kill30"); // J
   if (state.enemyKills === 1) unlockAch("first-blood");
 
   spawnFloatingText(enemy.x, enemy.y - 12, `+${earned}`,
@@ -2372,6 +2496,7 @@ function bossDefeated(b) {
     unlockAch("boss-1");
     if (meta.bossKills >= 5) unlockAch("boss-5");
     if (state.bossDamageTaken === 0) unlockAch("no-hit-boss");
+    if (state.bombsThrownThisRun === 0) questBump("bossNoBomb"); // J 中 Boss 不算(跟 Boss 成就同一條規矩)
   }
   // C 打點:本場第一次打倒 Boss(含中 Boss)送一發 -boss,才知道有多少人真的打到 Boss
   if (state.bossKillsRun === 1 && !state.replayPlaying && typeof window.psPing === "function") { try { window.psPing("flyshoot-boss"); } catch (_) {} }
@@ -2513,6 +2638,7 @@ function bumpCombo() {
   state.combo.timer = COMBO_TIMEOUT;
   state.combo.multiplier = clamp(1 + state.combo.count * 0.05, 1, 5);
   if (state.combo.count > state.combo.max) state.combo.max = state.combo.count;
+  questMax("combo50", state.combo.count); // J
   if (state.combo.count >= 50) unlockAch("combo-50");
   if (state.combo.count >= 100) unlockAch("combo-100");
   if (state.combo.count % 10 === 0) {
@@ -3089,6 +3215,7 @@ function advanceWave() {
   state.flawlessMult = cleanWave ? FLAWLESS_MULT : 1;
   if (cleanWave) {
     state.flawlessWaves += 1;
+    questMax("flawless2", state.flawlessWaves); // J
     spawnFloatingText(WORLD.width / 2, WORLD.height / 2 - 140, `★ 無傷!下一波分數 ×${FLAWLESS_MULT}`, "#8cffbf", 22);
     audio.combo(8);
   }
@@ -3100,6 +3227,7 @@ function advanceWave() {
     audio.setBgmStage(newStage);
   }
   state.stage = newStage;
+  questMax("stage2", state.stage); // J
   if (state.wave === 10) unlockAch("wave-10");
   if (state.wave === 25) unlockAch("wave-25");
   if (state.wave === 11 && state.bombsThrownThisRun === 0) unlockAch("no-bomb-10");
@@ -3922,6 +4050,7 @@ function startNewGame(seedOverride) {
   state.slowMoActive = false;
   state.timeWarp = null; state.waveHits = 0; state.flawlessMult = 1; state.flawlessWaves = 0;
   state.bombCashout = 0; state.midBossKillsRun = 0; state.tutorialOpen = false;
+  state.questsDoneRun = []; ensureQuestsFresh(); // J 開場先確認還是今天的三則
   document.body.classList.remove("fresh"); // A 玩過一場之後統計卡才有意義,選單態才顯示
   if (els.stageClearOverlay) els.stageClearOverlay.hidden = true;
   if (els.continueOverlay) els.continueOverlay.hidden = true;
@@ -3986,6 +4115,8 @@ function endGame() {
   }
   // C 📡 完賽打點:玩了 20 秒以上才算一場(誤觸不算),重播不算
   if (!state.replayPlaying && typeof window.psPing === "function" && performance.now() - state.runStartMs > 20000) { try { window.psPing("flyshoot-done"); } catch (_) {} }
+  // J 📅 今日任務「用深海潛航玩一場」:玩 20 秒以上才算、重播不算(其餘任務在戰鬥中即時判定)
+  if (!state.replayPlaying && performance.now() - state.runStartMs > 20000 && getSkin() === "deep") questBump("deep1");
 
   if (state.score >= 50000) unlockAch("score-50k");
   if (state.coop && state.score > 0) unlockAch("co-op");
@@ -4095,13 +4226,20 @@ function showFinalMenu(earnedCredits) {
     `Wave ${state.wave}．連擊紀錄 ${state.combo.max}．本場+${earnedCredits} 金幣。再來一次？`,
     "重新出擊"
   );
+  // J 📅 今日任務一行:本場完成幾則賺多少、還剩幾則
+  const qDone = state.questsDoneRun || [];
+  const qEarned = qDone.reduce((s, id) => s + ((questById(id) || {}).reward || 0), 0);
+  const qLine = qDone.length
+    ? `📅 今日任務本場完成 ${qDone.length} 則(+${qEarned} 金幣)${questsAllDone() ? "・三則全數完成!" : `・還剩 ${questsRemaining()} 則`}`
+    : (questsAllDone() ? "📅 今日任務三則已全部完成,明天再來!" : `📅 今日任務還剩 ${questsRemaining()} 則,再拚一場!`);
   showMessage(
     "MISSION END",
     `最終分數 ${stats.score}`,
     `難度 ${stats.difficulty}｜抵達 Wave ${stats.wave}｜時間 ${formatDuration(stats.duration)}
 擊殺 ${stats.kills}｜Boss ${stats.bosses}｜最高連擊 ${stats.maxCombo}
 寶物 ${stats.loot}｜受傷 ${stats.damage}｜炸彈 ${stats.bombs}｜金幣 +${stats.credits}
-★ 無傷波 ${stats.flawless}｜炸彈換分 +${stats.bombCashout}（剩 ${stats.bombsLeft} 顆）｜中 Boss ${stats.midBosses}`,
+★ 無傷波 ${stats.flawless}｜炸彈換分 +${stats.bombCashout}（剩 ${stats.bombsLeft} 顆）｜中 Boss ${stats.midBosses}
+${qLine}`,
     "重新出擊"
   );
   refreshMenuPanels();
@@ -4128,6 +4266,7 @@ function useSkill(p) {
     return;
   }
   p.skillCd = p.skillCdMax;
+  questBump("skill5"); // J
   if (p.skill === "deflect") {
     p.skillActive = p.skillDur;
     spawnFloatingText(p.x, p.y - 44, "🛡 反彈護罩", "#8cffbf", 18);
@@ -4243,7 +4382,9 @@ function togglePause() {
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && state.scene === "play") togglePause();
+  if (!document.hidden) ensureQuestsFresh(); // J 從背景回來已經隔天 ⇒ 換題
 });
+setInterval(() => { if (state.scene === "menu") ensureQuestsFresh(); }, 60000); // J 選單開著跨午夜也會換
 
 // =====================================================================
 //  Main loop
@@ -4434,6 +4575,7 @@ function registerInput() {
 // =====================================================================
 
 function refreshMenuPanels() {
+  renderQuests(); // J
   renderCharacters();
   renderShop();
   renderAchievements();

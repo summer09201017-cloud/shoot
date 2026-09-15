@@ -1,8 +1,10 @@
 // scripts/verify-behaviour.mjs —— 雷電 v20 九件行為驗收(Playwright-core + 系統 Edge;預設對本機 http://127.0.0.1:8011/,可傳線上網址):node scripts/verify-behaviour.mjs [url]
 import { createRequire } from "node:module";
+import { mkdirSync } from "node:fs";
 const require = createRequire("C:/Users/HFP/Downloads/hfpc-git/3D-Chess/package.json");
 const { chromium } = require("playwright-core");
-const OUT = "C:/Users/HFP/AppData/Local/Temp/claude/C--Users-HFP-Downloads-0910---0910--/84023f3c-0fd6-4f97-bd35-bb86fc007a21/scratchpad/";
+const OUT = (process.env.SHOT_DIR || "C:/Users/HFP/AppData/Local/Temp/claude/shoot-shots").replace(/[\/]?$/, "/");
+mkdirSync(OUT, { recursive: true });
 const URL = (process.argv[2] || "http://127.0.0.1:8011/").replace(/\/?$/, "/");
 const browser = await chromium.launch({ channel: "msedge", headless: true });
 let pass = 0, fail = 0; const errors = [];
@@ -185,6 +187,112 @@ const startGame = async (page) => { await ev(page, () => document.getElementById
   await ev(page, () => { setSkin("deep"); state.boss = null; for (let i = 0; i < 3; i++) { spawnEnemy({ x: 120 + i * 120, y: 120, elite: i === 1 }); } spawnFormation(); });
   await page.waitForTimeout(600);
   await page.screenshot({ path: OUT + "v21-deep-enemies.png" });
+  await ctx.close();
+}
+
+// ───────── J(v22)今日任務三則給金幣
+{
+  const { ctx, page } = await fresh({ width: 1280, height: 800 }, { seen: true });
+  const q0 = await ev(page, () => {
+    const rows = [...document.querySelectorAll("#questList .quest-row")];
+    const card = document.getElementById("questCard").getBoundingClientRect();
+    const start = document.getElementById("startButton").getBoundingClientRect();
+    const d1 = "2026-9-15", d2 = "2026-9-16";
+    return { rows: rows.length, ids: rows.map((r) => r.dataset.quest), uniq: new Set(quests.ids).size, day: quests.day, today: todayKey(), pool: QUEST_POOL.length,
+      belowStart: card.top >= start.bottom - 1, inView: card.bottom <= 800, sub: document.getElementById("questSub").textContent,
+      same: JSON.stringify(pickDailyQuests(quests.day)) === JSON.stringify(quests.ids), stable: JSON.stringify(pickDailyQuests(d1)) === JSON.stringify(pickDailyQuests(d1)), differs: JSON.stringify(pickDailyQuests(d1)) !== JSON.stringify(pickDailyQuests(d2)),
+      allInPool: quests.ids.every((id) => QUEST_POOL.some((q) => q.id === id)) };
+  });
+  ok(q0.rows === 3 && q0.uniq === 3 && q0.allInPool && q0.pool === 8 && q0.day === q0.today, `J 選單有今日任務卡三則(${q0.ids.join("/")})、題庫 8 種、日期=今天`, JSON.stringify(q0));
+  ok(q0.belowStart && q0.inView, "J 任務卡在「開始戰鬥」底下、桌機第一屏內", JSON.stringify(q0));
+  ok(q0.same && q0.stable && q0.differs, "J 同一天挑同三則(日期種子確定)、不同天不同", JSON.stringify(q0));
+  ok(/還剩 3 則/.test(q0.sub) && /後換題/.test(q0.sub), "J 副標寫「還剩 3 則」與幾小時後換題", q0.sub);
+  const seedChk = await ev(page, () => { setSeed(123); const a = rand(); setSeed(123); pickDailyQuests("2026-9-15"); pickDailyQuests("2026-9-16"); const b = rand(); return a === b; });
+  ok(seedChk, "J 挑題不動全域 rand(今日挑戰的種子不漂)");
+  await page.screenshot({ path: OUT + "v22-quest-menu.png" });
+  // 第一組(固定好驗):擊破 30 / 連擊 50 / 特殊技 5
+  await ev(page, () => { quests.ids = ["kill30", "combo50", "skill5"]; quests.progress = {}; quests.done = {}; quests.earned = 0; saveQuests(); renderQuests(); });
+  await startGame(page);
+  await page.waitForTimeout(300);
+  const k = await ev(page, () => {
+    const mk = () => ({ x: 100, y: 100, value: 10, elite: false, radius: 16, hp: 0 });
+    const c0 = meta.credits;
+    for (let i = 0; i < 29; i++) destroyEnemy(mk());
+    const ls = JSON.parse(localStorage.getItem("tf-quests-v1"));
+    const mid = { p: quests.progress.kill30, done: !!quests.done.kill30, credits: meta.credits - c0, ls: ls.progress.kill30, lsDay: ls.day === todayKey() };
+    destroyEnemy(mk());
+    const ls2 = JSON.parse(localStorage.getItem("tf-quests-v1"));
+    return { mid, p: quests.progress.kill30, done: !!quests.done.kill30, credits: meta.credits - c0, run: state.questsDoneRun.slice(), earned: quests.earned, text: state.texts.some((t) => /任務完成/.test(t.text)), lsDone: !!ls2.done.kill30, metaLs: JSON.parse(localStorage.getItem("tf-meta-v3")).credits, meta: meta.credits, combo: quests.progress.combo50 };
+  });
+  ok(k.mid.p === 29 && !k.mid.done && k.mid.credits === 0 && k.mid.ls === 29 && k.mid.lsDay, "J 擊破 29 ⇒ 進度 29/30 已存 localStorage、還沒給錢", JSON.stringify(k.mid));
+  ok(k.done && k.p === 30 && k.credits === 50 && k.run[0] === "kill30" && k.earned === 50 && k.text && k.lsDone && k.metaLs === k.meta, "J 第 30 擊 ⇒ 完成、+50 金幣當場入帳(meta 也存了)、畫面跳「任務完成」", JSON.stringify(k));
+  ok(k.combo === 30, `J 連擊任務同時累到 ${k.combo}/50(max 型)`, JSON.stringify(k));
+  const c = await ev(page, () => {
+    const c0 = meta.credits;
+    for (let i = 0; i < 20; i++) destroyEnemy({ x: 100, y: 100, value: 10, elite: false, radius: 16, hp: 0 });
+    return { combo: state.combo.count, p: quests.progress.combo50, done: !!quests.done.combo50, credits: meta.credits - c0, kill: quests.progress.kill30, killDone: !!quests.done.kill30 };
+  });
+  ok(c.combo === 50 && c.done && c.p === 50 && c.credits === 100, "J 連擊 50 ⇒ 完成 +100", JSON.stringify(c));
+  ok(c.kill === 30 && c.killDone, "J 已完成的任務不再累加(擊破停在 30)", JSON.stringify(c));
+  const s = await ev(page, () => {
+    const p = state.players[0]; const c0 = meta.credits;
+    for (let i = 0; i < 5; i++) { p.skillCd = 0; p.skillActive = 0; p.skillCharging = 0; state.timeWarp = null; useSkill(p); }
+    return { p: quests.progress.skill5, done: !!quests.done.skill5, credits: meta.credits - c0, all: questsAllDone(), earned: quests.earned, allText: state.texts.some((t) => /全數完成/.test(t.text)) };
+  });
+  ok(s.p === 5 && s.done && s.credits === 50 && s.all && s.earned === 200 && s.allText, "J 特殊技 5 次 ⇒ 完成 +50、三則全數完成(共 200)、跳「全數完成」", JSON.stringify(s));
+  await page.screenshot({ path: OUT + "v22-quest-complete-play.png" });
+  // 結算畫面一行 + 回選單卡片全綠
+  await ev(page, () => { state.players[0].bombs = 0; state.score = 0; endGame(); });
+  await page.waitForTimeout(300);
+  const fin = await ev(page, () => ({ scene: state.scene, body: document.getElementById("messageBody").textContent, rowsDone: document.querySelectorAll("#questList .quest-row.is-done").length, sub: document.getElementById("questSub").textContent, cardCls: document.getElementById("questCard").className, hidden: document.getElementById("messageCard").hidden }));
+  ok(fin.scene === "menu" && !fin.hidden && /今日任務本場完成 3 則\(\+200 金幣\)・三則全數完成/.test(fin.body), "J 結算畫面:「今日任務本場完成 3 則(+200 金幣)・三則全數完成!」", fin.body.split("\n").pop());
+  ok(fin.rowsDone === 3 && /is-all-done/.test(fin.cardCls) && /✅ 今日三則全部完成,共 \+200 金幣/.test(fin.sub), "J 回選單三列全綠、卡片描綠、副標寫共 +200", JSON.stringify({ rowsDone: fin.rowsDone, sub: fin.sub, cls: fin.cardCls }));
+  await page.screenshot({ path: OUT + "v22-quest-all-done.png" });
+  // 換日 ⇒ 換題、歸零
+  const ro = await ev(page, () => { quests.day = "2000-1-1"; saveQuests(); const changed = ensureQuestsFresh(); return { changed, day: quests.day, today: todayKey(), progress: Object.keys(quests.progress).length, done: Object.keys(quests.done).length, earned: quests.earned, rowsDone: document.querySelectorAll("#questList .quest-row.is-done").length, ls: JSON.parse(localStorage.getItem("tf-quests-v1")).day, sub: document.getElementById("questSub").textContent }; });
+  ok(ro.changed && ro.day === ro.today && ro.ls === ro.today && ro.progress === 0 && ro.done === 0 && ro.earned === 0 && ro.rowsDone === 0 && /還剩 3 則/.test(ro.sub), "J 換日 ⇒ 換題、進度歸零、卡片重畫", JSON.stringify(ro));
+  // 重播不算
+  const rp = await ev(page, () => { quests.ids = ["kill30", "loot15", "skill5"]; quests.progress = {}; quests.done = {}; quests.earned = 0; saveQuests(); state.replayPlaying = true; destroyEnemy({ x: 100, y: 100, value: 10, elite: false, radius: 16, hp: 0 }); collectLoot(state.players[0], { kind: "heal", x: 0, y: 0, color: "#fff" }); const r = { kill: quests.progress.kill30 || 0, loot: quests.progress.loot15 || 0 }; state.replayPlaying = false; return r; });
+  ok(rp.kill === 0 && rp.loot === 0, "J 重播中不算進度", JSON.stringify(rp));
+  // 第二組:撿寶 15 / STAGE BOSS 不用炸彈 / 深海一場
+  await ev(page, () => { quests.ids = ["loot15", "bossNoBomb", "deep1"]; quests.progress = {}; quests.done = {}; quests.earned = 0; saveQuests(); renderQuests(); setSkin("deep"); });
+  await startGame(page);
+  await page.waitForTimeout(300);
+  const b = await ev(page, () => {
+    const p = state.players[0]; const e0 = quests.earned;
+    for (let i = 0; i < 15; i++) collectLoot(p, { kind: "heal", x: 0, y: 0, color: "#fff" });
+    const loot = { p: quests.progress.loot15, done: !!quests.done.loot15, earned: quests.earned - e0 };
+    state.boss = null; spawnBoss(null, true); state.boss.arrived = true; state.boss.hp = 1; state.bombsThrownThisRun = 0; damageBoss(state.boss, 5, 240, 200);
+    const midP = quests.progress.bossNoBomb || 0;
+    state.boss = null; spawnBoss(null, false); state.boss.arrived = true; state.boss.hp = 1; state.bombsThrownThisRun = 1; damageBoss(state.boss, 5, 240, 200);
+    const bombedP = quests.progress.bossNoBomb || 0;
+    const e1 = quests.earned;
+    state.boss = null; spawnBoss(null, false); state.boss.arrived = true; state.boss.hp = 1; state.bombsThrownThisRun = 0; damageBoss(state.boss, 5, 240, 200);
+    return { loot, midP, bombedP, done: !!quests.done.bossNoBomb, earned: quests.earned - e1 };
+  });
+  ok(b.loot.p === 15 && b.loot.done && b.loot.earned === 50, "J 撿 15 個寶物 ⇒ 完成 +50", JSON.stringify(b.loot));
+  ok(b.midP === 0 && b.bombedP === 0 && b.done && b.earned === 150, "J 中 Boss / 丟過炸彈都不算;沒丟炸彈打倒 STAGE BOSS ⇒ +150", JSON.stringify(b));
+  const dp = await ev(page, () => { state.runStartMs = performance.now() - 25000; state.players[0].bombs = 0; state.score = 0; const e0 = quests.earned; endGame(); return { done: !!quests.done.deep1, earned: quests.earned - e0, run: state.questsDoneRun.slice(), body: document.getElementById("messageBody").textContent }; });
+  ok(dp.done && dp.earned === 50 && dp.run.includes("deep1") && /今日任務本場完成 3 則\(\+250 金幣\)・三則全數完成/.test(dp.body), "J 深海皮膚玩 20 秒以上結算 ⇒ 完成 +50;結算行寫本場 3 則 +250", JSON.stringify({ done: dp.done, earned: dp.earned, run: dp.run }));
+  // 深海玩不到 20 秒不算
+  await ev(page, () => { quests.ids = ["deep1", "stage2", "flawless2"]; quests.progress = {}; quests.done = {}; quests.earned = 0; saveQuests(); renderQuests(); });
+  await startGame(page); await page.waitForTimeout(300);
+  const sh = await ev(page, () => { state.players[0].bombs = 0; state.score = 0; endGame(); return { done: !!quests.done.deep1, p: quests.progress.deep1 || 0, body: document.getElementById("messageBody").textContent }; });
+  ok(!sh.done && sh.p === 0 && /今日任務還剩 3 則,再拚一場/.test(sh.body), "J 深海玩不到 20 秒不算;結算行寫「還剩 3 則,再拚一場」", JSON.stringify({ done: sh.done, p: sh.p }));
+  await ev(page, () => setSkin("mech"));
+  // 第三組:無傷 2 波 / 打到第 2 關(advanceWave)
+  await startGame(page); await page.waitForTimeout(300);
+  const aw = await ev(page, () => {
+    const e0 = quests.earned;
+    state.waveHits = 0; advanceWave(); const f1 = quests.progress.flawless2 || 0;
+    state.waveHits = 1; advanceWave(); const f1b = quests.progress.flawless2 || 0;
+    state.waveHits = 0; advanceWave(); const f2 = { p: quests.progress.flawless2, done: !!quests.done.flawless2 };
+    const s1 = quests.progress.stage2 || 0;
+    state.wave = 10; state.waveHits = 1; advanceWave();
+    return { f1, f1b, f2, s1, stage: state.stage, s2: quests.progress.stage2, sDone: !!quests.done.stage2, earned: quests.earned - e0 };
+  });
+  ok(aw.f1 === 1 && aw.f1b === 1 && aw.f2.p === 2 && aw.f2.done, "J 無傷波 1 →(被打那波不加)→ 2 ⇒ 完成", JSON.stringify(aw));
+  ok(aw.s1 === 1 && aw.stage === 2 && aw.s2 === 2 && aw.sDone && aw.earned === 200, "J 關卡 1/2 → 第 11 波進第 2 關 ⇒ 完成;兩則共 +200", JSON.stringify(aw));
   await ctx.close();
 }
 
