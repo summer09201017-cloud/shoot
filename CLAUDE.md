@@ -24,6 +24,22 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 | `run.bat` | Windows 本機 server 啟動腳本（Python → py launcher → PowerShell HttpListener fallback） |
 | `assets/` | icons (192/512/apple-touch/svg) |
 
+## 📅 今日任務（v22，2026-09-15；使用者拍板提案 J「每日任務三則給金幣」，回訪動機）
+
+- **挑題**：`QUEST_POOL` 8 種，每天用 `pickDailyQuests(todayKey())` 挑 `QUESTS_PER_DAY=3` 則 —— 同一天所有人同三則。
+  ★ 用**私有 PRNG**（FNV-1a 種子 + mulberry32 洗牌），**不碰全域 `rngState`**，否則今日挑戰／Replay 的種子會漂（verify 有一項在守）。
+- **兩種計法**：`mode:"sum"` 今天累加（kill30 / loot15 / skill5 / deep1 / bossNoBomb）、`mode:"max"` 取單場最高（combo50 / flawless2 / stage2）。
+- **計數點**：`destroyEnemy`(kill30)、`collectLoot`(loot15)、`bumpCombo`(combo50)、`advanceWave`(flawless2 / stage2)、`useSkill`(skill5)、
+  `bossDefeated` 的 `!b.mid` 區塊(bossNoBomb；中 Boss 不算、`state.bombsThrownThisRun > 0` 也不算)、`endGame`(deep1；深海皮膚且玩 >20s)。
+- **獎勵**：`questComplete` 當場 `meta.credits += reward`（50~150）+ `saveMeta` + `saveQuests`，畫面跳浮字，三則全完成再跳一行。重播（`state.replayPlaying`）一律不算。
+- **儲存**：`tf-quests-v1` = `{day, ids[3], progress{}, done{}, earned}`。`ensureQuestsFresh()` 在 `startNewGame` / `visibilitychange` 回前景 / 選單每 60 秒各查一次，
+  換日就換題並歸零（頁面開著跨午夜、App 昨天沒關都會換）。
+- **UI**：出擊分頁「開始戰鬥」下面 `#questCard`（`renderQuests()` 畫三列進度條 + 副標「還剩 N 則・X 小時後換題」；三則全完成整張卡 `.is-all-done` 描綠），
+  `refreshMenuPanels()` 會重畫；結算 `showFinalMenu` 多一行「今日任務本場完成 N 則（+M 金幣）」。
+- 驗收：`scripts/verify-behaviour.mjs` J 段 22 項（挑題確定性／不動全域 rand／29→30 才給錢／已完成不再累加／中 Boss 與炸彈不算／深海 20 秒門檻／
+  換日歸零／重播不算／結算文案）；手機 390 與 320 寬度「任務卡不溢出」另跑量測。
+- ⚠ 改文件時注意：本檔標題用的是**全角括號**`（）`。拿半角 `(` 當錨點做字串替換會**靜默沒命中**（0915 實踩一次）。
+
 ## 三皮膚 + 六 Boss（v21，2026-09-15；使用者拍板 Q「第三皮膚或新 Boss」兩個都做）
 
 - **第三套皮膚 `deep`（🐙 深海潛航）**：`SKINS = ["mech","rock","deep"]`（`getSkin/setSkin` 用它驗證）；`drawDeepEnemyArt`（basic=水母 / elite=燈籠魚 / formation=魟魚）、`drawDeepBossArt`（六隻：巨鎧蟹 / 劍旗魚 / 深海巨鯨 / 海蛇 / 烈焰水母 / 九頭海怪）；`buildSprites` 對 `BOSS_TYPES` 全表生成 `_mech/_rock/_deep` 三套；`drawBackground` 深海皮膚換 `deepSkies` 色盤；Boss 名字走 `bossNameFor(type)`（`name/rockName/deepName`）；選單文案 `syncSkinCopy` 三段。
@@ -160,6 +176,7 @@ B 級：#15 / #16 / #17 **已於 v20（2026-09-15）完成**，見下方「v20 �
 | `tf-replay-v1` | 單筆 last replay（legacy，仍寫入給「重播上一場」用） | saveLastReplay 結束時 |
 | `tf-replays-v1` | 多筆 replay ring buffer（cap 5，含 thumbnail） | saveLastReplay 結束時 |
 | `tf-muted` | "0" / "1" 音效靜音狀態 | audio.toggle |
+| `tf-quests-v1` | J 今日任務:當天三則 id / 進度 / 已完成 / 今日已賺金幣 | 進度推進、完成、換日重置 |
 
 ## 角色 perk 機制
 
