@@ -1,0 +1,155 @@
+雷電．蒼穹突擊(repo shoot)— 交接說明
+================================================================================
+給另一台 PC 的 AI:這份是純文字,讀完就能接手。
+
+⚠ 本 repo 以前**沒有這份檔**(只有 CLAUDE.md),2026-09-17 才補。
+  這不是小事:2026-09-15 做完的提案 J(今日任務)因為沒有 repo 級交接檔可記,
+  只寫進了 skills repo 大表;而 skills repo 0915 ★段那行 ⏩「J 待開工」沒人回頭改
+  ⇒ 0916 的 /take-over 照它把「J 開工」端給使用者,去問 git 才發現整件事早就做完。
+  ⇒ **以後每一輪都在本檔最上面長一段**,不要只記在大表。
+
+本 repo 的文件分工:
+  讀我-HANDOFF.txt(本檔)= 現在到哪、怎麼跑、有什麼地雷、下一步
+  CLAUDE.md              = 維護規則與地雷區、各系統設計(動程式前必讀,它比本檔詳細)
+  ※ 本 repo **沒有** README.md / roadmap.md —— 玩法與待辦都收在 CLAUDE.md
+    (待辦看 CLAUDE.md 檔尾「CP 值待辦」;權威來源仍是 skills repo 大表的雷電提案列)。
+
+
+★★★★★ 2026-09-17(HFP 機・Opus 5・0916-take-over-DEYI 場)v23:手機橫向(I)+ daily 真確定性(H)
+--------------------------------------------------------------------------------
+🧾 git 事實(交接時逐項問過 git,不是憑印象)
+   status --short 空 ・ HEAD = ae22adb ・ rev-list @{u}..HEAD = 0(真的推上去了)
+   線上:https://flyshoot.pages.dev 與 https://flyshoot.netlify.app **兩站 sw 都是
+        thunder-force-pwa-v23**(curl 帶 ?bust= 驗過)
+   驗收:verify-behaviour **88 過 / 0 失敗**(本機與線上各一輪)・check-vertag 11 綠
+        ・check-daily-determinism 綠 ・信友火花 verify-daily **12 站全綠**
+
+■ 📱 I 手機橫向版面 —— 病比「畫面太小」嚴重得多,而且只有「量」才看得到
+  WORLD 是 480×800 的 3:5 直式,而 `@media (max-width: 980px)` 的疊版規則讓畫布
+  「寬決定高」⇒ 橫向手機 844×390 時畫布變成 520×867 塞進 390 高。
+  量出來:**58.3% 的遊戲區在視窗外**(敵人從看不見的地方掉下來),頁面還能捲 1209px。
+  解:橫向回到兩欄(844−234=610px 本來就是空的),畫布改「高決定寬」吃滿 100svh,
+      觸控鈕用 position:fixed 送到右側拇指區。
+  改版前 → 後:被切 58.3% → **0%** ・可捲 1209px → **0px** ・畫布被鈕壓住 31/144 → **0/144**
+             ・直向 362×603 **不變**(零迴歸)
+  ⚠ 三個踩過的點(詳細寫在 CLAUDE.md「📱 手機橫向版面」段,改這段前先讀):
+   ㈠ 用 position:fixed 前**必須先關 .canvas-wrap 的 backdrop-filter** ——
+      它會替 fixed 子元素建立 containing block,不關的話鈕被綁回那 234px 的框裡。
+   ㈡ **.overlay 資訊小籤會吃掉畫布觸控**:命/炸/連擊/武器名那幾格原本吃 pointer events,
+      玩家拇指放上去拖曳戰機不會動,而**畫布尺寸完全正常**。
+      ⇒ `.overlay { pointer-events: none }`,只把真的要點的 `.weapon-slots` 開回來。
+   ㈢ **暫停鈕(這個版面的唯一出口)被右上角 ⛶ 整顆蓋住**(兩顆都在 right≈16px)。
+      順手把 ⛶ 從 42px 補到 44px(艦隊觸控目標鐵則)。
+
+■ 🎲 H daily 種子真確定性 —— ★★ **原本的診斷寫反了,這是本輪最值得帶走的一條**
+  CLAUDE.md 地雷區原本寫:「Math.random() 而非 rand() 用在很多地方,所以 daily seed
+  不能保證完全 deterministic」,大表提案 H 也照抄成「Math.random 20 幾處換 rand()」。
+  **照著做會讓病更重**(那只是把視覺特效也搬進種子流)。
+  真正的主因:**視覺特效在抽種子流** —— `spawnParticle` 每顆粒子從種子流抽 4 個數
+  (vx/vy/size/ttl),而它被 `if (Math.random() < delta * 6)` 這種**跟幀率綁死**的閘門呼叫;
+  星空 `star.x = random(0, WORLD.width)` 每幀重生也在抽。
+  ⇒ 同一顆種子在 60fps 與 30fps 的機器上長出**完全不同的關卡**(實測 **第 1 隻敵人就不同**)。
+    「每日挑戰全世界同一題」**在 2026-09-17 之前從來沒有成立過**,而且零紅燈:
+    畫面正常、console 乾淨、既有 67 項測試全綠。
+  ⇒ 修法是**拆三條流**(細節見 CLAUDE.md「🎲 三條 RNG 流」):
+      world  rand()/random()/randInt()     出題流:敵人生成、編隊、掉寶、Boss 彈幕角度、過關解鎖
+      combat crand()/crandom()             玩家自己的骰子:武器散布、異常狀態機率
+      visual vrand()/vrandom()/vrandInt()  純畫面:粒子、震動、浮字、星空 —— 永遠是 Math.random
+  ⇒ **加新亂數前先問**:它會改變「玩家碰到什麼」嗎?會 ⇒ world;只跟這個玩家的操作有關
+    ⇒ combat;純畫面 ⇒ visual。放錯 world 流的代價是**靜默的**。
+  刻意保留的 Math.random 只剩 4 個(vrand 實作 / 兩個音訊白噪音緩衝 / 非 daily 的種子來源),
+  `scripts/patch-rng-streams.mjs` 檔尾有斷言在守,多出來就紅。
+
+■ 🔗 H 後半:`?daily` / `?mode=daily` 深連結(app.js 檔尾 `applyDeepLink()`)
+  ⚠ 刻意**不叫** audio.ensure()/unlock()(自動播放本來就會擋,硬叫會吃掉第一次觸碰的解音時機)。
+  ⚠ **一律關掉 Boss Rush** —— 每日挑戰與 Boss Rush 是兩套排行,使用者上次勾過就會被帶進
+    「計時榜的每日場」,分數進不了今日排行。
+  ⚠ 第一次玩的人仍會看到教學卡(startNewGame 內建),深連結不跳過教學。
+  信友火花(repo hfpc-sparks-hub)`#daily` 第 12 張卡指 https://flyshoot.pages.dev/?daily,
+  那邊的 verify-daily.mjs 也加了本站一筆(pass 條件驗 **種子 == dateSeed()**,不是只看網址帶了參數)。
+
+■ 🧪 ★★ 新測試要先證明它會紅
+  `scripts/check-daily-determinism.mjs` 寫完當下就綠 —— 那時它什麼都沒證明。
+  用 `git stash push -- app.js` 把程式退回舊版重跑,看到它紅(第 1 隻敵人 zigzag 1 vs 0)
+  才算數,再 `git stash pop` 還原。
+  ⚠ 這支驗法自己踩了兩個坑,都寫在它的檔頭:
+   ㈠ 指紋要在**出生那一刻**抓(包 window.spawnEnemy)。等 update() 跑完再從 state.enemies 撈,
+      x 已被推一幀,不同幀率天生差 1px ⇒ 首版就是這樣得到「**假的**不一致」。
+   ㈡ 整段要放在**同一個同步 evaluate 區塊**(rAF 插不進同步區塊,才量得到我們給的幀率)。
+
+
+■ 這是什麼
+--------------------------------------------------------------------------------
+純 Canvas 2D + Web Audio + PWA 的垂直捲軸射擊遊戲,無框架、無外部依賴、無 build step。
+單檔 app.js 約 4800 行。規則、各系統設計、地雷區全在 CLAUDE.md。
+
+線上(兩站同步):
+  正式 https://flyshoot.pages.dev        (CF Pages 專案 `flyshoot`,大廳卡片指它)
+  舊站 https://flyshoot.netlify.app      (push main 後自動重建)
+GitHub:summer09201017-cloud/shoot(branch main)
+⚠ `hfpc-shooting3d.pages.dev` 是**另一款遊戲**(10m 氣步槍 3D),不是本 repo。
+
+
+■ 怎麼跑 / 怎麼驗
+--------------------------------------------------------------------------------
+  run.bat                      # 雙擊起本機 server(Python http.server :8000,會自己開瀏覽器)
+  python -m http.server 8011   # 驗收腳本預設打這個 port
+
+  node scripts/check-vertag.mjs                 # 版號四處不漂(11 項,零依賴)
+  node scripts/verify-behaviour.mjs             # 行為驗收 88 項(本機 127.0.0.1:8011)
+  node scripts/verify-behaviour.mjs https://flyshoot.pages.dev      # 同一支打線上
+  node scripts/check-daily-determinism.mjs [url] # daily 三種幀率跑同一顆種子
+  node scripts/measure-landscape.mjs [url]       # 三種視窗量畫布/被切%/捲動/觸控被接走幾格
+  SHOT_DIR=<dir> node scripts/measure-landscape.mjs   # 順便存截圖
+
+  沒有 npm test、沒有 package.json —— 驗收全靠上面四支(用系統 Edge + playwright-core)。
+
+
+■ 部署(改完一定要做,push 只會更新 Netlify 那站)
+--------------------------------------------------------------------------------
+  1) git push                      # Netlify flyshoot.netlify.app 自動重建
+  2) 複製 index.html / app.js / styles.css / sw.js / manifest.webmanifest / assets/
+     到一個**乾淨資料夾**(不要把 scripts/ 或 .git 帶上去),然後:
+     npx wrangler pages deploy "<那個資料夾的絕對路徑>" --project-name flyshoot --branch main --commit-dirty=true
+     ⚠ 目錄一律寫**絕對路徑字面**,不要用 shell 變數(zero-pii-guard 讀的是還沒展開的指令字串,會擋)。
+     ⚠ `--branch main` 一定要帶(不帶會只建 preview,正式網址一動也不動,而指令照樣回成功)。
+  3) 驗:curl -s "https://flyshoot.pages.dev/sw.js?bust=$RANDOM" | grep CACHE_NAME  → 要 v23
+
+
+■ 改版四處一起改(check-vertag.mjs 在守)
+--------------------------------------------------------------------------------
+  ① sw.js 的 CACHE_NAME = "thunder-force-pwa-vN"
+  ② index.html <summary>版本 vN(日期)
+  ③ index.html #verTag 第一行 vN + 日期
+  ④ #verTag 的「前幾版:」接上一版(vN-1 → … → v7 不可跳號)
+  ⚠ vN 後面要有**空白**才數得到(前幾版寫成 `v12(日期)` 會被守門判成跳號,0917 實踩)。
+
+
+■ 本機地雷
+--------------------------------------------------------------------------------
+  · **手機版 backdrop-filter 陷阱**:給 .hud-panel / .canvas-wrap 加 position:fixed 子元素前,
+    要先把該容器的 backdrop-filter 關掉,否則 fixed 變成相對於那個容器(0917 第二次發作)。
+  · **CORE_ASSETS 不放 ./index.html**:CF Pages 把 /index.html 308 到 /,快取存到 redirected
+    回應 ⇒ 裝成 App 打開就 ERR_FAILED。名單只放 ./。
+  · **ENEMY_FIRE_MUL = 5** 是全域 boss 子彈密度節流,改了會大幅影響難度。
+  · **音樂用 setInterval**,分頁背景時會有時序漂移;visibilitychange 監聽會 togglePause。
+  · 已裝的 App 舊 SW 還在時,第一次開可能要重整一次才拿到新版。
+
+
+■ 下一步(權威來源=skills repo 大表的雷電提案列,v189 已清到剩 4 條)
+--------------------------------------------------------------------------------
+  15 條提案中已上線:A/B/C/D/E/F/G/M/N(v20)、Q(v21)、J(v22)、**H/I(v23)**。
+  📋 待使用者拍板(**別動工**):
+     K 記住名字 + 本機多成員排行 …… 半天~1 天(**建議下一批先做這件**)
+        理由:主日學一台平板多個孩子輪流玩,現在分數全記在同一個名字下。
+     L 一命模式獨立排行 …… 2h
+     O 跨裝置排行榜(Workers + KV) …… 2~3 天
+     P 手機雙人(同機雙指或雙機 WebRTC) …… 3 天+
+  使用量基準:近 30 天開啟 9 次;v20 起有完賽/Boss 打點、v22 起有回訪動機、
+  **v23 起手機橫向才真的能玩**,可以拿來對照。
+
+  🟠 順手發現、**本輪沒處理**(給下一手):
+     守門 in-app-browser-guard 對本站 app.js 一直吠 —— 站上有「裝到主畫面」安裝鈕,
+     但沒有 LINE / FB 內建瀏覽器偵測。**教會的連結都走 LINE 發**,從 LINE 點進來
+     那顆鈕按了不會有反應。修法見 skill in-app-browser-guard(只提醒不擋)。
+     不在 H/I 範圍內,所以沒動。
