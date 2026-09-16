@@ -1019,3 +1019,121 @@ body.immersive #gameCanvas, body.mfs-fs #gameCanvas { height: 100svh; width: aut
 .quest-side { display: grid; justify-items: end; gap: 2px; font-size: 0.74rem; }
 .quest-side b { color: var(--text-main); font-variant-numeric: tabular-nums; }
 .quest-side em { font-style: normal; color: var(--gold); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   I 手機橫向版面(v23,2026-09-17;使用者拍板提案 I)
+   ───────────────────────────────────────────────────────────────────────────
+   病:WORLD 是 480×800 的 3:5 直式,而 ≤980px 的疊版規則把畫布撐成「寬決定高」
+       ⇒ 橫向手機(844×390)畫布變成 520×867 塞進 390 高。
+       量出來:**58.3% 的遊戲區在視窗外**,而且頁面能捲 1209px。不是「小」,
+       是看不到超過一半的戰場 —— 敵人從看不見的地方掉下來。
+   解:橫向時**回到桌機那套兩欄**,因為橫向根本不缺寬度(844 − 234 = 610px 是空的)。
+       ① 畫布改「高決定寬」:height:100svh ⇒ 234×390,**0% 被切**
+       ② .canvas-wrap 收成畫布本身的寬(width:max-content),角落的 mini-chip
+          才會貼著畫布,不會飄到空白區
+       ③ 觸控鈕改 position:fixed 送到視窗右側拇指區
+          ⚠ 這一步必須同時把 .canvas-wrap 的 backdrop-filter 關掉 ——
+            backdrop-filter 會替 fixed 子元素建立 containing block,
+            不關的話鈕會被綁回那 234px 寬的框裡(本 repo CLAUDE.md 記過的陷阱)
+   ⚠ 只管「非沉浸態」:沉浸(body.immersive/.mfs-fs)自己有一組規則在下面,
+     兩邊打架會像 dragtetris 0916 那樣把畫面壓成 3%。用 :not() 明確切開。
+   ⚠ 選單態維持單欄(canvas 本來就被藏起來),選單要整個寬度才放得下。
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 980px) and (orientation: landscape) {
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"],
+  body:not(.immersive):not(.mfs-fs)[data-scene="paused"] {
+    padding: 0;
+    height: 100svh;
+    overflow: hidden; /* 殺掉那 1209px 的捲動 */
+  }
+
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .app-shell,
+  body:not(.immersive):not(.mfs-fs)[data-scene="paused"] .app-shell {
+    grid-template-columns: minmax(150px, 240px) 1fr;
+    gap: 6px;
+    width: 100%;
+    height: 100svh;
+    align-items: stretch;
+  }
+
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .hud-panel,
+  body:not(.immersive):not(.mfs-fs)[data-scene="paused"] .hud-panel {
+    order: 0;               /* 疊版時被設成 order:2,橫向要回到左欄 */
+    overflow-y: auto;
+    padding: 8px 10px;
+    gap: 8px;
+    font-size: 0.74em;
+    border-radius: 0;
+    border-left: 0;
+  }
+
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .canvas-wrap,
+  body:not(.immersive):not(.mfs-fs)[data-scene="paused"] .canvas-wrap {
+    width: max-content;     /* 收成畫布本身的寬,mini-chip 才貼著畫布 */
+    justify-self: start;
+    min-height: 0;
+    height: 100svh;
+    border-radius: 0;
+    border: 0;
+    backdrop-filter: none;  /* ⚠ 不關掉,下面的 position:fixed 會被綁回這個框 */
+  }
+
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] #gameCanvas,
+  body:not(.immersive):not(.mfs-fs)[data-scene="paused"] #gameCanvas {
+    height: 100svh;
+    width: auto;
+    max-width: none;
+    max-height: 100svh;
+    border-radius: 0;
+  }
+
+  /* 觸控鈕:改貼視窗右側(畫布左、拇指右),並縮到 390 高裝得下的尺寸 */
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .bomb-button,
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .focus-button,
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .skill-button,
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .pause-button {
+    position: fixed;
+  }
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .bomb-button {
+    right: 16px; bottom: 16px; width: 66px; height: 66px;
+  }
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .focus-button {
+    right: 92px; bottom: 20px; width: 58px; height: 58px;
+  }
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .skill-button {
+    right: 158px; bottom: 24px; width: 50px; height: 50px;
+  }
+  /* 暫停鈕(= 這個版面的「出口」:暫停 → 放棄回主選單)放右上。
+     ⚠ right:16px 會被右上角那顆 ⛶(#mfsFull,fixed right:8px)**整顆蓋住** ——
+       量到 pauseButton(784,14,44,44) vs mfsFull(794,8,42,42),
+       elementFromPoint 打在暫停鈕正中央拿到的是 ⛶ 的 svg ⇒ 零出口。
+       (與 dragtetris 0916「第一版把 ✕ 離開全螢幕一起藏掉」同一條:
+        收起可以收「字」,絕不能收「出口」。)
+     ⇒ 讓開 ⛶ 的寬度,排在它左邊。 */
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .pause-button {
+    left: auto; right: 72px; top: 12px; bottom: auto; width: 44px; height: 44px;
+  }
+}
+
+/* ── 畫布上的資訊小籤不可以吃掉觸控(v23,I 這輪量出來的)──────────────────
+   .overlay 系列是「印在畫布上的資訊」(命/炸/連擊/武器名),它們原本吃 pointer
+   events ⇒ 玩家把拇指放在那幾格上拖曳,戰機不會動,而**畫布尺寸完全正常**。
+   量法:elementFromPoint 在畫布鋪 12×12(見 scripts/measure-landscape.mjs)。
+   實測:直向 10/144、橫向 31/144(21.5%)被接走。
+   ⚠ 只有 .weapon-slots 是真的要點的(CLAUDE.md:4 槽切換 TAB / X / 點 chip),
+     所以是「整片關掉、只把它開回來」,不是逐個關。 */
+.overlay { pointer-events: none; }
+.weapon-slots { pointer-events: auto; }
+
+/* 橫向時連武器槽也搬離畫布 —— 畫布只有 234px 寬,任何東西壓上去都是一大塊 */
+@media (max-width: 980px) and (orientation: landscape) {
+  body:not(.immersive):not(.mfs-fs)[data-scene="play"] .overlay.bottom-left,
+  body:not(.immersive):not(.mfs-fs)[data-scene="paused"] .overlay.bottom-left {
+    position: fixed;
+    left: auto;
+    right: 16px;
+    bottom: 96px;
+    align-items: flex-end;
+    flex-direction: column;
+  }
+}

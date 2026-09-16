@@ -166,19 +166,53 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const lerp = (a, b, t) => a + (b - a) * t;
 
+// ── 三條 RNG 流(v23,H「daily 種子真確定性」)──────────────────────────
+// 以前只有一條種子流,而**視覺特效也在抽它**:spawnParticle 每顆粒子抽 4 個數,
+// 又被 `if (Math.random() < delta * 6)` 這種跟幀率綁死的閘門呼叫;星空每幀重生也抽。
+// ⇒ 同一顆種子在 60fps 與 30fps 的機器上會長出完全不同的關卡 —— 這才是 daily 不確定
+//   的主因,不是「有些地方寫 Math.random()」(那只是另一半)。
+//
+//   world  rand()/random()/randInt()   世界流:敵人生成、編隊、掉寶、Boss 彈幕角度、
+//                                      過關解鎖。**只有世界事件能抽**,順序固定 ⇒ 同一天
+//                                      所有人面對同一批波次。
+//   combat crand()/crandom()           戰鬥流:玩家武器散布、異常狀態機率。玩家開幾槍
+//                                      因人而異,分開一條才不會把世界流推掉。
+//   visual vrand()/vrandom()/vrandInt() 視覺流:粒子、震動、浮字、星空。**永遠不吃種子**
+//                                      (Math.random 就好),抽多少次都不影響玩法。
+// ⚠ 新增亂數時先問:它會改變「玩家碰到什麼」嗎?會 ⇒ world;只跟這個玩家的操作有關
+//   ⇒ combat;純畫面 ⇒ visual。放錯 world 流的代價是靜默的:畫面正常、測試全綠,
+//   只有「兩台機器跑同一天卻不同關」才看得出來。
 let rngState = 0xa1b2c3 >>> 0;
+let combatState = 0xc0ffee >>> 0;
 function setSeed(seed) {
   rngState = ((seed | 0) >>> 0) || 0xdeadbeef;
+  // 戰鬥流由同一顆種子派生(換種子就換,但兩條流各走各的,互不推擠)
+  combatState = ((rngState ^ 0x9e3779b9) >>> 0) || 0xc0ffee;
 }
-function rand() {
-  rngState = (rngState + 0x6d2b79f5) >>> 0;
-  let t = rngState;
+function mix32(s) {
+  let t = s;
   t = Math.imul(t ^ (t >>> 15), t | 1);
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
+function rand() {
+  rngState = (rngState + 0x6d2b79f5) >>> 0;
+  return mix32(rngState);
+}
 const random = (lo, hi) => lo + rand() * (hi - lo);
 const randInt = (lo, hi) => Math.floor(random(lo, hi + 1));
+
+// 戰鬥流(玩家自己的骰子)
+function crand() {
+  combatState = (combatState + 0x6d2b79f5) >>> 0;
+  return mix32(combatState);
+}
+const crandom = (lo, hi) => lo + crand() * (hi - lo);
+
+// 視覺流(永遠不吃種子;抽再多次都不會動到世界流)
+const vrand = () => Math.random();
+const vrandom = (lo, hi) => lo + vrand() * (hi - lo);
+const vrandInt = (lo, hi) => Math.floor(vrandom(lo, hi + 1));
 
 function dateSeed(date = new Date()) {
   const k = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -1658,8 +1692,10 @@ function cycleWeapon(p) {
 
 function spawnParticle(x, y, color) {
   state.particles.push({
-    x, y, vx: random(-180, 180), vy: random(-180, 180),
-    size: random(2, 5), ttl: random(0.3, 0.9), color,
+    // ⚠ 視覺流:粒子數量跟幀率有關(見 updateEnemies 的 `vrand() < delta * 6`),
+    //   一旦改用種子流,60fps 與 30fps 會抽走不同數量的世界亂數 ⇒ daily 關卡不一致。
+    x, y, vx: vrandom(-180, 180), vy: vrandom(-180, 180),
+    size: vrandom(2, 5), ttl: vrandom(0.3, 0.9), color,
   });
 }
 function spawnExplosion(x, y, color, count) {
@@ -1701,8 +1737,8 @@ function stageScript() { return STAGE_SCRIPT[waveInStage()] || STAGE_SCRIPT[1]; 
 function spawnEnemy(opts = {}) {
   const stage = state.stage;
   const eliteChance = Math.min(0.08 + state.wave * 0.012, 0.32) * (stageScript().eliteMul || 1);
-  const elite = opts.elite ?? Math.random() < eliteChance;
-  const zigzag = opts.zigzag ?? Math.random() < 0.34;
+  const elite = opts.elite ?? rand() < eliteChance;
+  const zigzag = opts.zigzag ?? rand() < 0.34;
   const boost = stage * 0.5;
   state.enemies.push({
     x: opts.x ?? random(40, WORLD.width - 40),
@@ -1732,7 +1768,7 @@ function spawnFormation() {
   const count = Math.max(1, Math.round(baseCount * enemyRate()));
 
   if (kind === 0) {
-    const dir = Math.random() < 0.5 ? 1 : -1;
+    const dir = rand() < 0.5 ? 1 : -1;
     for (let i = 0; i < count; i++) {
       const startX = dir > 0 ? -40 - i * 36 : WORLD.width + 40 + i * 36;
       const e = makeFormationEnemy(id);
@@ -1902,16 +1938,16 @@ function maybeApplyStatus(enemy) {
   if (!enemy || enemy.hp <= 0) return;
   const now = performance.now();
   const fL = meta.shop.freeze | 0;
-  if (fL > 0 && Math.random() < STATUS_CHANCE[fL]) {
+  if (fL > 0 && crand() < STATUS_CHANCE[fL]) {
     enemy.frozenUntil = Math.max(enemy.frozenUntil || 0, now + 1500);
   }
   const bL = meta.shop.burn | 0;
-  if (bL > 0 && Math.random() < STATUS_CHANCE[bL]) {
+  if (bL > 0 && crand() < STATUS_CHANCE[bL]) {
     enemy.burnUntil = Math.max(enemy.burnUntil || 0, now + 3000);
     enemy.burnDps = 1 + bL;
   }
   const sL = meta.shop.shock | 0;
-  if (sL > 0 && Math.random() < STATUS_CHANCE[sL]) {
+  if (sL > 0 && crand() < STATUS_CHANCE[sL]) {
     chainShock(enemy, sL);
   }
 }
@@ -2153,12 +2189,12 @@ const BOSS_PATTERNS = {
       { fire: pAimedFan("#ff7777", 5, 0.1, 230), cooldown: 0.7 },
     ],
     [
-      { fire: pRing("#ff5d5d", 20, 180, BOSS_TELEGRAPH_TIME, () => Math.random() * Math.PI), cooldown: 1.2 },
+      { fire: pRing("#ff5d5d", 20, 180, BOSS_TELEGRAPH_TIME, () => rand() * Math.PI), cooldown: 1.2 },
       { fire: pAimedFan("#ff9d9d", 7, 0.08, 250), cooldown: 0.7 },
       { fire: pSpiral("#ffaa66", 6, 170), cooldown: 0.3 },
     ],
     [
-      { fire: pRing("#ff5d5d", 24, 200, BOSS_TELEGRAPH_TIME, () => Math.random() * Math.PI), cooldown: 0.9 },
+      { fire: pRing("#ff5d5d", 24, 200, BOSS_TELEGRAPH_TIME, () => rand() * Math.PI), cooldown: 0.9 },
       { fire: pCrossLasers(), cooldown: 1.4 },
       { fire: pSpiral("#ffaa66", 8, 200), cooldown: 0.22 },
       { fire: pAimedFan("#ff5d5d", 9, 0.06, 270), cooldown: 0.95 },
@@ -2301,9 +2337,9 @@ function fireHoming(p) {
   const count = 2 + p.power; // 3..12
   const dmg = (1 + Math.floor(p.power / 3)) * p.dmgBonus;
   for (let i = 0; i < count; i++) {
-    const a = -Math.PI / 2 + random(-0.5, 0.5);
+    const a = -Math.PI / 2 + crandom(-0.5, 0.5);
     state.bullets.push({
-      x: p.x + random(-8, 8), y: p.y - 14, radius: 5,
+      x: p.x + crandom(-8, 8), y: p.y - 14, radius: 5,
       vx: Math.cos(a) * 380, vy: Math.sin(a) * 380,
       damage: dmg, color: "#d7a6ff", spread: 0, owner: p.id,
       homing: true, life: 2.4,
@@ -2329,7 +2365,7 @@ function spawnLoot(x, y, opts = {}) {
     { kind: "credit",  weight: 8,  color: "#ffd86c" },
   ];
   const total = pool.reduce((s, x) => s + x.weight, 0);
-  let roll = Math.random() * total;
+  let roll = rand() * total;
   const picked = pool.find((it) => (roll -= it.weight) <= 0) || pool[0];
   state.loot.push({
     x, y, radius: opts.large ? 12 : 10,
@@ -2463,8 +2499,8 @@ function destroyEnemy(enemy, bombed = false) {
   }
 
   const dropChance = (enemy.elite ? 0.78 : 0.22) * difficultyConfig().loot;
-  if (!bombed && Math.random() < dropChance) spawnLoot(enemy.x, enemy.y);
-  else if (bombed && Math.random() < 0.05) spawnLoot(enemy.x, enemy.y);
+  if (!bombed && rand() < dropChance) spawnLoot(enemy.x, enemy.y);
+  else if (bombed && rand() < 0.05) spawnLoot(enemy.x, enemy.y);
 }
 
 function damageBoss(b, dmg, x, y, fromBomb = false) {
@@ -2482,7 +2518,7 @@ function bossDefeated(b) {
   const earn = Math.round((1500 + state.stage * 400) * (b.mid ? 0.4 : 1) * state.combo.multiplier * state.flawlessMult);
   state.score += earn;
   spawnFloatingText(b.x, b.y, `BOSS +${earn}`, "#ffd86c", 26);
-  for (let i = 0; i < 60; i++) spawnParticle(b.x + random(-30, 30), b.y + random(-30, 30), b.color);
+  for (let i = 0; i < 60; i++) spawnParticle(b.x + vrandom(-30, 30), b.y + vrandom(-30, 30), b.color);
   shake(20, 0.7); hitstop(0.18);
   audio.bossBoom();
 
@@ -2927,7 +2963,8 @@ function updateStarsParallax(delta) {
       star.y += layer.speed * delta;
       if (star.y > WORLD.height) {
         star.y = -5;
-        star.x = random(0, WORLD.width);
+        // ⚠ 視覺流:星星每幀依速度重生,幀率不同抽的次數就不同 —— 這是舊版種子流最大的漏口
+        star.x = vrandom(0, WORLD.width);
       }
     });
   });
@@ -3114,7 +3151,7 @@ function updateEnemies(delta) {
     // Burn DOT
     if (e.burnUntil && now < e.burnUntil && e.burnDps) {
       e.hp -= e.burnDps * delta;
-      if (Math.random() < delta * 6) spawnParticle(e.x, e.y, "#ff8a3a");
+      if (vrand() < delta * 6) spawnParticle(e.x, e.y, "#ff8a3a");
     }
   });
   state.enemies = state.enemies.filter((e) =>
@@ -3257,7 +3294,7 @@ function triggerStageClear(clearedStage) {
     if (p.power < POWER_CAP) p.power = clamp(p.power + 1, 1, POWER_CAP);
     const lockedSlots = WEAPON_ORDER.filter((w) => w !== "default" && !p.weaponSlots[w]);
     if (lockedSlots.length > 0) {
-      const pick = lockedSlots[Math.floor(Math.random() * lockedSlots.length)];
+      const pick = lockedSlots[Math.floor(rand() * lockedSlots.length)];
       p.weaponSlots[pick] = true;
       rewards.push(`解鎖 ${WEAPONS[pick].name}`);
     } else {
@@ -3323,7 +3360,7 @@ function handleCollisions() {
       const perp = c * dy - s * dx;
       if (along > 0 && Math.abs(perp) < e.radius + beam.width / 2) {
         e.hp -= beam.damage;
-        if (Math.random() < 0.3) spawnParticle(e.x, e.y, "#fff39a");
+        if (vrand() < 0.3) spawnParticle(e.x, e.y, "#fff39a");
       }
     }
     if (state.boss && state.boss.arrived) {
@@ -3409,8 +3446,8 @@ function handleCollisions() {
 // =====================================================================
 
 function render() {
-  const sx = state.shake.intensity > 0 ? (Math.random() - 0.5) * state.shake.intensity : 0;
-  const sy = state.shake.intensity > 0 ? (Math.random() - 0.5) * state.shake.intensity : 0;
+  const sx = state.shake.intensity > 0 ? (vrand() - 0.5) * state.shake.intensity : 0;
+  const sy = state.shake.intensity > 0 ? (vrand() - 0.5) * state.shake.intensity : 0;
   ctx.save();
   ctx.clearRect(0, 0, WORLD.width, WORLD.height);
   ctx.translate(sx, sy);
@@ -3960,8 +3997,8 @@ function drawZaps() {
     ctx.moveTo(z.x1, z.y1);
     for (let i = 1; i < segs; i++) {
       const t = i / segs;
-      const ox = (Math.random() - 0.5) * 12;
-      const oy = (Math.random() - 0.5) * 12;
+      const ox = (vrand() - 0.5) * 12;
+      const oy = (vrand() - 0.5) * 12;
       ctx.lineTo(lerp(z.x1, z.x2, t) + ox, lerp(z.y1, z.y2, t) + oy);
     }
     ctx.lineTo(z.x2, z.y2);
@@ -4006,10 +4043,11 @@ function seedStars() {
     const count = idx === 2 ? 60 : idx === 1 ? 40 : 30;
     for (let i = 0; i < count; i++) {
       layer.stars.push({
-        x: random(0, WORLD.width),
-        y: random(0, WORLD.height),
-        size: random(0.6, 2.4) + idx * 0.4,
-        alpha: random(0.3, 0.95),
+        // 視覺流:星空 130 顆 × 4 個數 = 520 抽,以前全記在世界流頭上
+        x: vrandom(0, WORLD.width),
+        y: vrandom(0, WORLD.height),
+        size: vrandom(0.6, 2.4) + idx * 0.4,
+        alpha: vrandom(0.3, 0.95),
       });
     }
   });
@@ -4752,4 +4790,31 @@ showMessage(
 );
 if (els.skillBtn) els.skillBtn.hidden = true;
 syncHud();
+
+// ── H ?daily 深連結(v23):信友火花「今日挑戰」十站直達 ───────────────────
+// 網址帶 ?daily(或 ?mode=daily)就代勾「每日挑戰」並直接開局,不必自己找那個勾。
+// ⚠ 這裡**刻意不叫 audio.ensure()/unlock** —— 自動播放政策本來就會擋,硬叫只會吃掉
+//   使用者第一次觸碰螢幕的解音時機(airhockey2d/3d 0906 同一條)。
+// ⚠ 每日挑戰與 Boss Rush 是兩套排行榜,深連結進來一律關掉 Boss Rush,
+//   否則使用者上次勾過就會被帶進「計時榜的每日場」,分數進不了今日排行。
+// ⚠ 第一次玩的人仍會看到教學卡(startNewGame 內建),深連結不跳過教學。
+function applyDeepLink() {
+  let wantDaily = false;
+  try {
+    const q = new URLSearchParams(location.search);
+    wantDaily = q.has("daily") || q.get("mode") === "daily";
+  } catch (_) { return false; }
+  if (!wantDaily) return false;
+  if (els.dailyToggle) els.dailyToggle.checked = true;
+  if (els.bossRushToggle) els.bossRushToggle.checked = false;
+  state.coop = els.coopToggle ? els.coopToggle.checked : false;
+  state.daily = true;
+  state.bossRush = false;
+  state.recording = els.recordToggle ? els.recordToggle.checked : false;
+  state.difficulty = els.difficultySelect?.value || "normal";
+  startNewGame();
+  return true;
+}
+applyDeepLink();
+
 requestAnimationFrame(tick);

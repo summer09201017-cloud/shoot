@@ -296,6 +296,140 @@ const startGame = async (page) => { await ev(page, () => document.getElementById
   await ctx.close();
 }
 
+// ───────── H(v23)?daily 深連結 + 種子分流
+{
+  // ① 帶 ?daily 進來 ⇒ 自動勾「每日挑戰」並直接開局(不必自己找那個勾)
+  const ctx = await browser.newContext({ viewport: { width: 900, height: 900 } });
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(String(e).slice(0, 160)));
+  await page.goto(URL, { waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined");
+  await ev(page, () => localStorage.setItem("tf-tutorial-seen", "1"));
+  await page.goto(URL + "?daily", { waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined");
+  const dl = await ev(page, () => ({
+    scene: state.scene, daily: state.daily, rush: state.bossRush,
+    toggle: document.getElementById("dailyToggle").checked,
+    rushToggle: document.getElementById("bossRushToggle")?.checked ?? false,
+    seed: state.rngSeed, want: dateSeed(),
+  }));
+  ok(dl.scene === "play" && dl.daily === true && dl.toggle === true, "H ?daily 直接開局且「每日挑戰」已勾起", JSON.stringify(dl));
+  ok(dl.seed === dl.want, "H ?daily 用的是今天的日期種子(不是隨機種子)", JSON.stringify({ seed: dl.seed, want: dl.want }));
+  ok(dl.rush === false && dl.rushToggle === false, "H ?daily 一律關掉 Boss Rush(兩套排行不可混)", JSON.stringify(dl));
+
+  // ② ?mode=daily 同義
+  await page.goto(URL + "?mode=daily", { waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined");
+  const dl2 = await ev(page, () => ({ scene: state.scene, daily: state.daily }));
+  ok(dl2.scene === "play" && dl2.daily === true, "H ?mode=daily 同義", JSON.stringify(dl2));
+
+  // ③ 沒帶參數 ⇒ 維持停在選單(不可以自己開打)
+  await page.goto(URL, { waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined");
+  const plain = await ev(page, () => ({ scene: state.scene, daily: state.daily }));
+  ok(plain.scene === "menu" && plain.daily === false, "H 沒帶參數就停在選單、不代開局", JSON.stringify(plain));
+
+  // ④ 三條流分家:視覺流抽幾次都不可以動到世界流
+  const streams = await ev(page, () => {
+    startNewGame(4242);
+    const a = [rand(), rand(), rand()];
+    startNewGame(4242);
+    for (let i = 0; i < 5000; i++) vrand();        // 視覺流狂抽
+    for (let i = 0; i < 500; i++) crand();          // 戰鬥流也狂抽
+    const b = [rand(), rand(), rand()];
+    startNewGame(4242);
+    const c0 = [crand(), crand()];
+    startNewGame(4242);
+    for (let i = 0; i < 300; i++) rand();           // 世界流狂抽
+    const c1 = [crand(), crand()];
+    return { same: JSON.stringify(a) === JSON.stringify(b), combatSame: JSON.stringify(c0) === JSON.stringify(c1), a, b };
+  });
+  ok(streams.same, "H 視覺流/戰鬥流抽 5500 次,世界流一個數都沒被推走", JSON.stringify(streams.a) + " vs " + JSON.stringify(streams.b));
+  ok(streams.combatSame, "H 世界流抽 300 次,戰鬥流也不受影響(兩邊互不推擠)", JSON.stringify(streams));
+
+  // ⑤ 粒子不可以再吃種子流(這是舊版 daily 漂掉的主因)
+  const vis = await ev(page, () => {
+    startNewGame(777);
+    const before = [rand(), rand()];
+    startNewGame(777);
+    for (let i = 0; i < 40; i++) spawnParticle(100, 100, "#fff");
+    shake(9, 0.4);
+    spawnFloatingText(10, 10, "x", "#fff", 12);
+    const after = [rand(), rand()];
+    return { ok: JSON.stringify(before) === JSON.stringify(after), before, after };
+  });
+  ok(vis.ok, "H 灑 40 顆粒子 + 震動 + 浮字後,世界流仍在原位", JSON.stringify(vis));
+  await ctx.close();
+}
+
+// ───────── I(v23)手機橫向版面
+for (const vp of [{ width: 844, height: 390 }, { width: 740, height: 360 }]) {
+  const ctx = await browser.newContext({ viewport: vp, hasTouch: true, deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(String(e).slice(0, 160)));
+  await page.goto(URL, { waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined" && document.body.dataset.scene === "menu");
+  await ev(page, () => localStorage.setItem("tf-tutorial-seen", "1"));
+  await page.reload({ waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined" && document.body.dataset.scene === "menu");
+  await ev(page, () => startNewGame());
+  await page.waitForTimeout(350);
+  const L = await ev(page, () => {
+    const cv = document.getElementById("gameCanvas");
+    const r = cv.getBoundingClientRect();
+    const visW = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
+    const visH = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+    let total = 0, stolen = 0;
+    for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+      const x = r.left + (r.width * (i + 0.5)) / 12, y = r.top + (r.height * (j + 0.5)) / 12;
+      if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+      total++;
+      const el = document.elementFromPoint(x, y);
+      if (el && el !== cv) stolen++;
+    }
+    const reach = ["pauseButton", "mfsFull", "bombButton", "focusButton", "skillButton"].map((id) => {
+      const e = document.getElementById(id);
+      if (!e) return { id, ok: false, why: "不存在" };
+      const b = e.getBoundingClientRect();
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { id, ok: (e === hit || e.contains(hit)) && b.width >= 44 && b.height >= 44, w: Math.round(b.width), h: Math.round(b.height) };
+    });
+    return {
+      cut: +((1 - (visW * visH) / (r.width * r.height)) * 100).toFixed(1),
+      scroll: Math.round(document.documentElement.scrollHeight - innerHeight),
+      stolen, total, reach, cols: getComputedStyle(document.querySelector(".app-shell")).gridTemplateColumns.split(" ").length,
+      h: Math.round(r.height), vh: innerHeight,
+    };
+  });
+  const tag = `I ${vp.width}×${vp.height}`;
+  ok(L.cut === 0, `${tag} 畫布 0% 被切在視窗外(改版前 58.3%)`, JSON.stringify({ cut: L.cut }));
+  ok(L.h >= L.vh - 2, `${tag} 畫布吃滿視窗高(高決定寬)`, JSON.stringify({ h: L.h, vh: L.vh }));
+  ok(L.scroll <= 0, `${tag} 頁面不再捲動(改版前 1209px)`, JSON.stringify({ scroll: L.scroll }));
+  ok(L.cols === 2, `${tag} 回到兩欄(HUD 左、畫布右)`, JSON.stringify({ cols: L.cols }));
+  ok(L.stolen === 0, `${tag} 畫布零觸控被鈕/小籤接走(改版前 31/144)`, JSON.stringify({ stolen: L.stolen, total: L.total }));
+  ok(L.reach.every((r) => r.ok), `${tag} 五顆鈕都點得到且 ≥44px(含「出口」暫停鈕)`, JSON.stringify(L.reach.filter((r) => !r.ok)));
+  await ctx.close();
+}
+
+// I 直向不可以被橫向那組規則波及(dragtetris 0916:沒分方向 ⇒ 橫向規則把直向壓成 3%)
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 1 });
+  const page = await ctx.newPage();
+  await page.goto(URL, { waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined" && document.body.dataset.scene === "menu");
+  await ev(page, () => localStorage.setItem("tf-tutorial-seen", "1"));
+  await page.reload({ waitUntil: "load" });
+  await page.waitForFunction(() => typeof state !== "undefined" && document.body.dataset.scene === "menu");
+  await ev(page, () => startNewGame());
+  await page.waitForTimeout(350);
+  const P = await ev(page, () => {
+    const r = document.getElementById("gameCanvas").getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height), cols: getComputedStyle(document.querySelector(".app-shell")).gridTemplateColumns.split(" ").length };
+  });
+  ok(P.w >= 340 && P.cols === 1, "I 直向零迴歸:仍是單欄、畫布仍吃滿寬(362×603)", JSON.stringify(P));
+  await ctx.close();
+}
+
 ok(errors.length === 0, "零 pageerror / console error", errors.slice(0, 3).join(" || "));
 console.log(`${fail ? "🔴" : "🟢"} ${pass} 過 / ${fail} 失敗`);
 await browser.close();

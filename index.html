@@ -21,7 +21,7 @@
   /* 只在觸控裝置、且還沒進全螢幕時出現;進了就自己藏 ⇒ 玩的時候不壓到棋盤/HUD。桌機不顯示(按 F11) */
   body:not(.mfs-fs) #mfsFull{position:fixed;display:flex;align-items:center;justify-content:center;
     top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));
-    z-index:2147482000;width:42px;height:42px;padding:0;border-radius:11px;
+    z-index:2147482000;width:44px;height:44px;padding:0;border-radius:11px;
     border:1px solid rgba(255,255,255,.42);background:rgba(9,15,19,.55);color:#fff;
     cursor:pointer;opacity:.55;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
   body:not(.mfs-fs) #mfsFull:hover,body:not(.mfs-fs) #mfsFull:focus-visible{opacity:1}
@@ -35,7 +35,7 @@
 @media (pointer:fine){
   body:not(.mfs-fs) #mfsFull{position:fixed;display:flex;align-items:center;justify-content:center;
     top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));
-    z-index:2147482000;width:42px;height:42px;padding:0;border-radius:11px;
+    z-index:2147482000;width:44px;height:44px;padding:0;border-radius:11px;
     border:1px solid rgba(255,255,255,.42);background:rgba(9,15,19,.55);color:#fff;
     cursor:pointer;opacity:.55;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
   body:not(.mfs-fs) #mfsFull:hover,body:not(.mfs-fs) #mfsFull:focus-visible{opacity:1}
@@ -150,10 +150,11 @@
                以前只有右下角一顆 10 秒就淡出、也點不了的徽章,沒有簡歷)。白話寫給家長/老師,本版在最前、最舊在最後。
                ★ 改版四處一起改:sw.js CACHE_NAME / 這裡 summary 的 vN / verTag 第一行 vN + 日期 / 前幾版接上一版(scripts/check-vertag.mjs 在守)。 -->
           <details class="ver-fold" id="verFold">
-            <summary>版本 v22(2026-09-15)・看看前幾版做了什麼</summary>
+            <summary>版本 v23(2026-09-17)・看看前幾版做了什麼</summary>
             <p id="verTag" class="ver-tag">
-              版本 v22(2026-09-15)・📅 <b>今日任務:每天三則,完成給金幣</b>——①出擊分頁「開始戰鬥」底下多一張「今日任務」小卡,每天從 8 種任務裡換三則(擊破 30 個目標、不用炸彈打倒 STAGE BOSS、連擊 50、撿 15 個寶物、一場無傷 2 波、用特殊技 5 次、打到第 2 關、用深海潛航玩一場),同一天大家拿到的三則一樣 ②戰鬥中做到就當場入帳 +50~150 金幣、畫面跳「任務完成」;累計型(擊破/撿寶/特殊技)不用一場打完,單場型(連擊/無傷波/關卡)取最好的一場 ③每天午夜換題、進度歸零,卡片會寫還剩幾則、幾小時後換題;結算畫面也會說本場完成幾則 ④重播不算。<br>
-              前幾版:v21 🐙 <b>第六隻 Boss「九頭蛇艦」+ 第三套戰場皮膚「深海潛航」</b>——①新 Boss 三招都是以前沒有的:雙砲塔各瞄一次的扇形彈、飛一段會炸成一圈小彈的「分裂彈」(外圈會脈動提醒你)、會慢慢轉向你的「追蹤魚雷」(有壽命,拖久了會散掉);第 6 關的 STAGE BOSS 就是它,第 5 關的中 Boss 會先來一隻弱化版預告 ②開戰前「戰場」多一個 🐙 深海潛航:敵人變成水母、燈籠魚、魟魚群,六隻 Boss 變成巨鎧蟹、劍旗魚、深海巨鯨、海蛇、烈焰水母、九頭海怪,海水越深越黑;玩法、排行、錄影三套皮膚完全共用 ③Boss Rush 仍是原本五隻,計時榜才能跟舊紀錄比。<br>
+              版本 v23(2026-09-17)・📱 <b>手機橫向終於能玩了 + 每日挑戰全世界真的同一題</b>——①以前手機打橫拿,畫面會被撐得太大塞不進去,<b>超過一半的戰場在螢幕外</b>(敵人從你看不見的地方掉下來),還要上下捲才找得到;現在打橫會自動換成「左邊資訊、右邊戰場」的版面,戰場高度剛好吃滿螢幕、<b>一格都不會被切掉</b>,炸彈/聚焦/特殊技三顆鈕移到右手拇指的位置,暫停鈕也挪開不再被放大鈕蓋住 ②直向玩法完全沒變 ③🎯 修好一個藏很久的毛病:「每日挑戰」本來說好全世界同一題,實際上<b>手機跑得順不順會影響關卡長什麼樣</b>——因為畫面特效(爆炸粒子、星空)會偷走出題用的亂數;現在特效走自己的一套,出題那套誰都碰不到,同一天不管用什麼裝置,遇到的敵人一模一樣 ④從「信友火花．今日挑戰」點進來會直接開每日挑戰,不必自己找那個勾。<br>
+              前幾版:v22 📅 <b>今日任務:每天三則,完成給金幣</b>——①出擊分頁「開始戰鬥」底下多一張「今日任務」小卡,每天從 8 種任務裡換三則(擊破 30 個目標、不用炸彈打倒 STAGE BOSS、連擊 50、撿 15 個寶物、一場無傷 2 波、用特殊技 5 次、打到第 2 關、用深海潛航玩一場),同一天大家拿到的三則一樣 ②戰鬥中做到就當場入帳 +50~150 金幣、畫面跳「任務完成」;累計型(擊破/撿寶/特殊技)不用一場打完,單場型(連擊/無傷波/關卡)取最好的一場 ③每天午夜換題、進度歸零,卡片會寫還剩幾則、幾小時後換題;結算畫面也會說本場完成幾則 ④重播不算。<br>
+              ・v21 🐙 <b>第六隻 Boss「九頭蛇艦」+ 第三套戰場皮膚「深海潛航」</b>——①新 Boss 三招都是以前沒有的:雙砲塔各瞄一次的扇形彈、飛一段會炸成一圈小彈的「分裂彈」(外圈會脈動提醒你)、會慢慢轉向你的「追蹤魚雷」(有壽命,拖久了會散掉);第 6 關的 STAGE BOSS 就是它,第 5 關的中 Boss 會先來一隻弱化版預告 ②開戰前「戰場」多一個 🐙 深海潛航:敵人變成水母、燈籠魚、魟魚群,六隻 Boss 變成巨鎧蟹、劍旗魚、深海巨鯨、海蛇、烈焰水母、九頭海怪,海水越深越黑;玩法、排行、錄影三套皮膚完全共用 ③Boss Rush 仍是原本五隻,計時榜才能跟舊紀錄比。<br>
               ・v20 🎮 <b>九件一次到位</b>——①「開始戰鬥」搬到最上面,打開就看得到、不用往下捲(還沒玩過時全是 0 的統計卡先不顯示)②第一次玩會跳「30 秒學會」教學卡,每場開局 5 秒無敵先熟悉操作 ③✨ 每台機體有特殊技(按 C 或畫面上的 SKILL 鈕,有冷卻):標準機・幻影=⏳ 時間減速,速攻機=🛡 彈幕反彈(碰到的敵彈變你的子彈),重裝機・風暴=💥 蓄力大砲 ④每關第 5 波多一隻「中 Boss」,十波各有節奏(前哨→編隊→精英→中 Boss→殘兵→雙編隊→彈幕群→決戰前夕→STAGE BOSS),不再一路重複 ⑤★ 一波都沒被打到,下一波分數 ×2 ⑥💣 結算時剩下的炸彈每顆 +500 分,別亂炸 ⑦🎵 音樂、🔊 音效各自四檔音量,會記住 ⑧電腦版也有 ⛶ 放大鈕,按了收掉左欄、畫面吃滿螢幕高;順手修正電腦版畫面以前被橫向拉寬 16% 的比例 ⑨開啟/完賽/打到 Boss 都有匿名統計(零個資)。<br>
               ・v19 🏷 <b>版本號與改版簡歷看得到、點得開了</b>——選單最底多了這一段;右下角那顆版號徽章以前 10 秒就消失、也點不了,現在點一下就展開這份簡歷(2026-09-15)
               ・v18 🩹 <b>修好「裝成 App 打開就無法連上」的隱藏地雷</b>——網站主機會把 index.html 這個網址自動轉到首頁,而離線快取名單裡偏偏列著 index.html,存到的是被轉址過的一份,從主畫面開 App 時瀏覽器拒收;現在名單只認首頁、一個檔一個檔存(2026-09-14)

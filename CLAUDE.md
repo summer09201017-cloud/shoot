@@ -24,6 +24,54 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 | `run.bat` | Windows 本機 server 啟動腳本（Python → py launcher → PowerShell HttpListener fallback） |
 | `assets/` | icons (192/512/apple-touch/svg) |
 
+## 🎲 三條 RNG 流（v23，2026-09-17；使用者拍板提案 H「daily 種子真確定性」）
+
+| 流 | 函式 | 誰可以抽 | 為什麼分開 |
+|---|---|---|---|
+| **world** | `rand()` / `random()` / `randInt()` | 敵人生成、編隊、掉寶種類與機率、Boss 環彈相位、過關解鎖槽位 | 這條決定「今天大家碰到什麼」。**只有世界事件能抽**，順序固定 ⇒ 同一天同一批波次 |
+| **combat** | `crand()` / `crandom()` | 玩家追蹤彈散布、異常狀態（冰/燒/電）機率 | 玩家開幾槍、命中幾次因人而異；不分開就會把世界流推掉 |
+| **visual** | `vrand()` / `vrandom()` / `vrandInt()` | 粒子、畫面震動、浮字偏移、星空 | **永遠是 `Math.random()`，不吃種子**。抽多少次都不影響玩法 |
+
+- `setSeed(seed)` 同時設 world 與 combat（combat 由 `seed ^ 0x9e3779b9` 派生）；visual 沒有狀態。
+- ⚠ **新增亂數前先問**：它會改變「玩家碰到什麼」嗎？會 ⇒ world；只跟這個玩家的操作有關 ⇒ combat；純畫面 ⇒ visual。
+  放錯 world 流的代價是**靜默的**：畫面正常、測試全綠，只有「兩台機器跑同一天卻不同關」才看得出來。
+- 刻意保留的 `Math.random()` 只有 4 個：`vrand` 的實作、兩個音訊白噪音緩衝（init 建一次）、非 daily 場次的種子來源本身。
+  `scripts/patch-rng-streams.mjs` 的檔尾斷言在守這件事（多出來就紅）。
+- 驗收：`node scripts/check-daily-determinism.mjs` —— 同一顆種子用 60fps / 30fps / 抖動三種幀率各跑 14 秒遊戲時間，
+  逐項比對敵人指紋（出生點/菁英/蛇行/速度/相位）。
+  ★ 驗法本身踩過兩個坑，都寫在那支檔頭：①指紋要在**出生那一刻**抓（等 update() 跑完再撈，x 已被推一幀，不同幀率天生差 1px ⇒ 假紅）
+  ②整段要放在**同一個同步 evaluate**（rAF 插不進同步區塊，才量得到「我們給的幀率」而不是瀏覽器的）。
+
+## 🔗 ?daily 深連結（v23，2026-09-17；提案 H 後半）
+
+- 網址帶 `?daily` 或 `?mode=daily` ⇒ `applyDeepLink()`（app.js 檔尾，`requestAnimationFrame(tick)` 之前）代勾「每日挑戰」並直接 `startNewGame()`。
+- ⚠ **刻意不叫 `audio.ensure()/unlock()`**：自動播放政策本來就會擋，硬叫只會吃掉使用者第一次觸碰螢幕的解音時機（airhockey2d/3d 0906 同一條）。
+- ⚠ **一律關掉 Boss Rush**：每日挑戰與 Boss Rush 是兩套排行榜，使用者上次勾過就會被帶進「計時榜的每日場」，分數進不了今日排行。
+- 第一次玩的人仍會看到教學卡（`startNewGame` 內建），深連結不跳過教學。
+- 信友火花「今日挑戰」第 12 張卡指 `https://flyshoot.pages.dev/?daily`；那邊的 `verify-daily.mjs` 也加了本站一筆。
+
+## 📱 手機橫向版面（v23，2026-09-17；使用者拍板提案 I）
+
+- 病：`WORLD` 是 480×800 的 3:5 直式，而 `@media (max-width: 980px)` 的疊版規則讓畫布「寬決定高」
+  ⇒ 橫向手機 844×390 時畫布變成 520×867 塞進 390 高。量出來：**58.3% 的遊戲區在視窗外**、頁面可捲 1209px。
+- 解：橫向**回到兩欄**（橫向根本不缺寬度，844 − 234 = 610px 是空的）。全部在 `styles.css` 檔尾，
+  用 `@media (max-width: 980px) and (orientation: landscape)` + `body:not(.immersive):not(.mfs-fs)` 圈起來。
+  ① 畫布改「高決定寬」`height:100svh` ⇒ 234×390，**0% 被切**
+  ② `.canvas-wrap { width: max-content }` 收成畫布本身的寬，角落 mini-chip 才貼著畫布
+  ③ 觸控鈕改 `position: fixed` 送到視窗右側拇指區
+- ⚠ **三個踩過的點，改這段前先讀**：
+  ㈠ 用 `position: fixed` 前必須把 `.canvas-wrap` 的 `backdrop-filter` 關掉 —— 它會替 fixed 子元素建立 containing block，
+     不關的話鈕被綁回那 234px 的框裡（本檔「手機版 backdrop-filter 陷阱」那條的第二次發作）。
+  ㈡ **`.overlay` 會吃掉畫布觸控**：命/炸/連擊/武器名那些小籤原本吃 pointer events，玩家拇指放上去拖曳戰機不會動，
+     而**畫布尺寸完全正常**。量到直向 10/144、橫向 31/144（21.5%）。修法是 `.overlay { pointer-events: none }`
+     再把真的要點的 `.weapon-slots` 開回來。橫向另外把武器槽整片搬離畫布。
+  ㈢ **暫停鈕是這個版面的「出口」，不可被蓋住**：`right:16px` 會被右上角那顆 ⛶（`#mfsFull`，fixed `right:8px`）整顆蓋住
+     —— `elementFromPoint` 打在暫停鈕正中央拿到的是 ⛶ 的 svg ⇒ 零出口。已挪到 `right:72px`。
+     順手把 `#mfsFull` 從 42px 補到 **44px**（艦隊觸控目標鐵則）。
+- 驗收：`node scripts/measure-landscape.mjs`（三種視窗印「畫布/被切%/捲動/觸控被接走幾格」）
+  + `verify-behaviour.mjs` 的 I 段（兩種橫向各 6 項 + 直向零迴歸 1 項）。
+  ★ **面積數字照不出觸控竊取** —— 一定要跑 `elementFromPoint` 點陣（dragtetris 0916 同一條）。
+
 ## 📅 今日任務（v22，2026-09-15；使用者拍板提案 J「每日任務三則給金幣」，回訪動機）
 
 - **挑題**：`QUEST_POOL` 8 種，每天用 `pickDailyQuests(todayKey())` 挑 `QUESTS_PER_DAY=3` 則 —— 同一天所有人同三則。
@@ -79,7 +127,7 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 - **xlsx-style：只改 .js / .css / .html，本機檔案 = 雲端真理**（無 build step）
 - **沒有框架**：不要引入 React/Vue/Vite。所有 DOM 操作用 `document.getElementById($())`，CSS 修改用 className
 - **不寫測試**：靠手動測 + console
-- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v21）讓舊 cache 失效
+- **PWA cache 用 network-first 給 code，cache-first 給 assets** — 改 code 後 bump `CACHE_NAME`（目前 v23）讓舊 cache 失效
 - **🏷 版本兩件套(2026-09-15,v19;使用者「版本號與簡歷打不開」)**:選單最底 `<details id="verFold">`(summary 寫本版 vN + 日期,`#verTag` 白話簡歷、前幾版接到 v7)+ 右下角 `#appVerBadge` 可點(點了展開簡歷並捲到它;戰鬥中選單收起就先提示)。**改版四處一起改**:`sw.js` CACHE_NAME / summary vN / verTag 第一行 vN+日期 / 前幾版接上一版 —— `node scripts/check-vertag.mjs` 在守(本 repo 唯一的自動檢查,零依賴)。
 - **手機版選單**：`@media (max-width: 980px)` 時 `body[data-scene="menu"] .canvas-wrap { display: none }`，因為 `.hud-panel` 的 `backdrop-filter: blur` 會建立 fixed-positioning containing block，導致 `position:fixed` modal 被綁住。所以我們改成「選單時直接隱藏 canvas」而非 modal overlay
 - **deltaTime 在 slow-mo 時降到 0.65×**，但 audio / parallax 用真實 delta 不縮放
@@ -109,7 +157,12 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
 ## 已知地雷區
 
 - **`ENEMY_FIRE_MUL = 5`** 是全域 boss 子彈密度節流。改了會大幅影響難度
-- **`Math.random()` 而非 `rand()`** 用在很多地方，所以 daily seed 不能保證完全 deterministic（replay 也會有微小 drift，現有功能容忍）
+- ~~**`Math.random()` 而非 `rand()`** 用在很多地方，所以 daily seed 不能保證完全 deterministic~~
+  → **v23(2026-09-17)修掉了,而且原本這條寫反了**:主因不是「有些地方寫 Math.random()」,
+  而是**視覺特效在抽種子流** —— `spawnParticle` 每顆粒子從種子流抽 4 個數,又被
+  `if (Math.random() < delta * 6)` 這種跟幀率綁死的閘門呼叫;星空每幀重生也抽。
+  ⇒ 同一顆種子在 60fps 與 30fps 的機器上長出**完全不同的關卡**(實測:第 1 隻敵人就不同)。
+  現在分成三條流,見下面「三條 RNG 流」段;迴歸 `node scripts/check-daily-determinism.mjs`。
 - **音樂用 `setInterval`**，可能在分頁背景時產生時序漂移；`visibilitychange` 監聽會 togglePause
 - **手機版 backdrop-filter 陷阱**：給 `.hud-panel` 加 `position: fixed` 子元素時要先取消 backdrop-filter，否則 fixed 變相對於 hud-panel
 - **service worker 改了要 bump cache name**，否則 PWA 用舊 cache 直到 SW 自然更新（以前是 cache-first，現在 network-first 已經沒這問題）
