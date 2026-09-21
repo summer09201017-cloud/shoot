@@ -15,6 +15,26 @@
     (待辦看 CLAUDE.md 檔尾「CP 值待辦」;權威來源仍是 skills repo 大表的雷電提案列)。
 
 
+★★★★★ 2026-09-21(HFP 機・Fable 5.1・0920-更名-家裡 場)v24:難度大調整(使用者:「雷電太容易,要加強難度」)
+--------------------------------------------------------------------------------
+■ 先量再改 —— 新工具 scripts/measure-difficulty.mjs(兩隻不丟炸彈的 bot × 四難度 × 4 種子,同步推 update)
+  改前:**躺平不動的 bot 在四種難度(含彈幕)全部活滿 420 秒、打到第 30 波,普通剩 8 命,7 分鐘只被打中 33 發。**
+  改後:普通躺平 4 顆種子 3 顆在第 4~5 波(≈60 秒)死;彈幕躺平第 3 波死;閃避 bot(幀級完美反應)普通仍活滿但剩 2.5 命。
+  ⚠ 量尺首版把 STAGE CLEAR 那 2.6 秒(running=false 但 update 照推)讀成「死亡」,四種難度整齊在 141 秒死 —— 一看就假。
+    結束條件要看 state.scene !== "play" || continueOverlay,不是 running。已寫進腳本註解。
+
+■ 改了什麼(全在 app.js 常數區;細節與理由見 CLAUDE.md「🎚 難度(v24)」段)
+  ・命數改由難度決定:簡單 5 / 普通 3 / 硬派 3 / 彈幕 2(以前每架機體寫死 10 命)。index.html 選項標籤帶命數。
+  ・ENEMY_FIRE_MUL 5 → 2.6(小兵開火密度 ×1.9);Boss 拆出 BOSS_FIRE_MUL 3.6(只加四成)。
+  ・waveFireMul():小兵冷卻每波 −1.8%,第 28 波封頂 0.5。不抽亂數 ⇒ check-daily-determinism 仍綠。
+  ・硬派/彈幕倍率拉開;掉寶 0.8 / 0.65(敵人多 ⇒ 掉寶多 ⇒ 補血多,要跟著收)。
+  ・沒動:簡單的倍率、炸彈數(8~12)、開局 5 秒無敵、低血慢動作、continue、每日出題。
+
+■ 驗收:check-vertag 11 綠 ・ verify-behaviour 88 過 / 0 失敗 ・ check-daily-determinism 綠 ・ measure-difficulty 見上。
+■ 部署:同下方「部署」段(CF Pages flyshoot,--branch main);線上 sw 要 v24。
+■ 下一步候選:若使用者回報「普通還是太鬆」,先動 waveFireMul 的 0.018(斜率)與 DIFFICULTIES.normal.bulletRate,
+  改一個數字跑一次量尺,不要憑感覺一次改三個。
+
 ★★★★★ 2026-09-17(HFP 機・Opus 5・0916-take-over-DEYI 場)v23:手機橫向(I)+ daily 真確定性(H)
 --------------------------------------------------------------------------------
 🧾 git 事實(交接時逐項問過 git,不是憑印象)

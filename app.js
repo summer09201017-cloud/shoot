@@ -62,8 +62,13 @@ const LOOT_MAGNET_RADIUS = 118;
 const LOOT_FOCUS_MAGNET_RADIUS = 178;
 const LOOT_MAGNET_SPEED = 330;
 // Enemy bullet density throttle. Higher = fewer bullets.
-// Multiplies enemy fire cooldowns and boss pattern timers.
-const ENEMY_FIRE_MUL = 5;
+// ★ v24(2026-09-21)使用者:「雷電太容易,要加強難度」。先量再改(scripts/measure-difficulty.mjs):
+//   一隻**站著不動、不閃、不丟炸彈**的 bot,在四種難度(連「彈幕」)都活滿 420 秒、打到第 30 波,
+//   普通難度還剩 8 條命 —— 小兵 7 分鐘只打中它 33 發。主因就是這個 5:小兵首發要等 3.5~6.4 秒,
+//   而它們 4~7 秒就飄出畫面,多數一槍都沒開。5 → 2.6 後小兵開火密度約 ×1.9。
+//   Boss 彈幕原本也吃同一個 5;拆成 BOSS_FIRE_MUL 單獨調,不要一口氣把 Boss 戰變成彈幕地獄。
+const ENEMY_FIRE_MUL = 2.6;
+const BOSS_FIRE_MUL = 3.6;
 const POWER_CAP = 20;
 const LOW_HP_RATIO = 0.2;
 const LOW_HP_TIME_SCALE = 0.65;
@@ -80,6 +85,9 @@ const FLAWLESS_MULT = 2;      // F 一波不受傷 ⇒ 下一波分數 ×2
 const MID_BOSS_WAVE = 5;      // M 每 stage 第 5 波中 Boss(第 10 波仍是 STAGE BOSS)
 const MID_BOSS_HP_MUL = 0.42; // 中 Boss 血量倍率(只有兩個 phase、不會 ENRAGED)
 
+// v24:①`lives` 改由難度決定(以前每架機體都寫死 10 條命 —— 10 命 × 每命 6~16 HP + 每死一次滿血補 4 盾,
+//        等於要被打中上百發才會結束,這就是「太容易」的另一半)②硬派/彈幕的倍率整體拉開
+//        (原本硬派只比普通多 14~18%,四檔玩起來幾乎一樣)。簡單維持原倍率、命最多,留給小小孩。
 const DIFFICULTIES = {
   easy: {
     label: "簡單",
@@ -89,6 +97,7 @@ const DIFFICULTIES = {
     bulletSpeed: 0.88,
     bossHp: 0.8,
     loot: 1.22,
+    lives: 5,
   },
   normal: {
     label: "普通",
@@ -98,24 +107,27 @@ const DIFFICULTIES = {
     bulletSpeed: 1,
     bossHp: 1,
     loot: 1,
+    lives: 3,
   },
   hard: {
     label: "硬派",
-    enemyRate: 1.18,
-    enemyHp: 1.18,
-    bulletRate: 1.14,
-    bulletSpeed: 1.08,
-    bossHp: 1.18,
-    loot: 0.92,
+    enemyRate: 1.3,
+    enemyHp: 1.25,
+    bulletRate: 1.45,
+    bulletSpeed: 1.15,
+    bossHp: 1.25,
+    loot: 0.8,   // 敵人多 ⇒ 掉寶多 ⇒ 補血多:量尺上硬派躺平 bot 一度活得比普通久,靠的就是這條;掉寶要跟著收
+    lives: 3,
   },
   storm: {
     label: "彈幕",
-    enemyRate: 1.42,
-    enemyHp: 1.35,
-    bulletRate: 1.34,
-    bulletSpeed: 1.15,
-    bossHp: 1.38,
-    loot: 0.84,
+    enemyRate: 1.6,
+    enemyHp: 1.5,
+    bulletRate: 1.9,
+    bulletSpeed: 1.3,
+    bossHp: 1.5,
+    loot: 0.65,
+    lives: 2,
   },
 };
 
@@ -238,16 +250,16 @@ const saveJSON = (k, v) => safeSet(k, JSON.stringify(v));
 
 const CHARACTERS = [
   { id: "alpha",    name: "Alpha 標準",   desc: "平衡型，火力均衡。",
-    hp: 10, lives: 10, bombs: 10, fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0, skill: "slow" },
+    hp: 10, lives: 3,  bombs: 10, fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0, skill: "slow" },
   { id: "blade",    name: "Blade 速攻",   desc: "速度與射速優異，但 HP 低。",
-    hp: 7,  lives: 10, bombs: 8,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0, skill: "deflect" },
+    hp: 7,  lives: 3,  bombs: 8,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0, skill: "deflect" },
   { id: "fortress", name: "Fortress 重裝", desc: "高 HP、雙倍傷害、自帶護盾，但較慢。",
-    hp: 16, lives: 10, bombs: 12, fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6, skill: "charge" },
+    hp: 16, lives: 3,  bombs: 12, fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6, skill: "charge" },
   { id: "phantom",  name: "Phantom 幻影", desc: "聚焦再 -25% 速度，僚機 +1。需擊破 5 隻 Boss 解鎖。",
-    hp: 9,  lives: 10, bombs: 10, fireRate: 0.20, speed: 300, dmg: 1, color: "#d7a6ff", startShield: 2,
+    hp: 9,  lives: 3,  bombs: 10, fireRate: 0.20, speed: 300, dmg: 1, color: "#d7a6ff", startShield: 2,
     perk: "phantom", lockedBy: "boss-5", skill: "slow", skillCd: 16, skillDur: 4 },
   { id: "tempest",  name: "Tempest 風暴", desc: "射速 ×1.4、HP 低。需 100 連擊解鎖。",
-    hp: 6,  lives: 10, bombs: 8,  fireRate: 0.13, speed: 340, dmg: 1, color: "#ff5d8f", startShield: 0,
+    hp: 6,  lives: 3,  bombs: 8,  fireRate: 0.13, speed: 340, dmg: 1, color: "#ff5d8f", startShield: 0,
     perk: "tempest", lockedBy: "combo-100", skill: "charge", skillCd: 11 },
 ];
 
@@ -1454,6 +1466,13 @@ function scaledBulletSpeed(value) {
   return value * difficultyConfig().bulletSpeed;
 }
 
+// v24:小兵開火隨波數加快 —— 量尺顯示以前第 30 波跟第 1 波一樣鬆(敵彈密度只看難度、不看進度),
+//   會閃的 bot 撐滿 30 波。每過一波冷卻 −1.8%,第 28 波起封頂在一半(= 開火密度 ×2)。
+//   不抽亂數、不進 world 流 ⇒ daily 出題完全不受影響(check-daily-determinism 仍綠)。
+function waveFireMul() {
+  return Math.max(0.5, 1 - (state.wave - 1) * 0.018);
+}
+
 // =====================================================================
 //  Adaptive resolution
 // =====================================================================
@@ -1498,7 +1517,7 @@ function createPlayer(idx) {
     speed: c.speed,
     hp: baseHp,
     maxHp: baseHp,
-    lives: idx === 0 ? c.lives : 0,
+    lives: idx === 0 ? (difficultyConfig().lives ?? c.lives) : 0, // v24:命數看難度(簡單 5 / 普通 3 / 硬派 3 / 彈幕 2)
     bombs: idx === 0 ? baseBombs : 0,
     power: startPower,
     weapon: "default",
@@ -1747,8 +1766,8 @@ function spawnEnemy(opts = {}) {
     speed: elite ? random(85, 130) + boost : random(110, 180) + state.wave * 4 + boost,
     hp: scaledEnemyHp(elite ? 8 + state.wave + stage : 2 + Math.floor(state.wave / 2) + Math.floor(stage / 2)),
     maxHp: scaledEnemyHp(elite ? 8 + state.wave + stage : 2 + Math.floor(state.wave / 2) + Math.floor(stage / 2)),
-    shootCooldown: ((elite ? random(0.6, 1.4) : random(1.2, 2.2)) * ENEMY_FIRE_MUL) / bulletRate(),
-    fireRate: ((elite ? random(0.75, 1.2) : random(1.4, 2.6)) * ENEMY_FIRE_MUL) / bulletRate(),
+    shootCooldown: ((elite ? random(0.6, 1.4) : random(1.2, 2.2)) * ENEMY_FIRE_MUL * waveFireMul()) / bulletRate(),
+    fireRate: ((elite ? random(0.75, 1.2) : random(1.4, 2.6)) * ENEMY_FIRE_MUL * waveFireMul()) / bulletRate(),
     zigzag,
     seed: random(0, Math.PI * 2),
     value: elite ? 220 : 80,
@@ -1811,8 +1830,8 @@ function makeFormationEnemy(id) {
     x: 0, y: -40, radius: 14,
     speed: 130 + stage * 5,
     hp, maxHp: hp,
-    shootCooldown: (random(1.2, 2.6) * ENEMY_FIRE_MUL) / bulletRate(),
-    fireRate: (random(1.6, 2.8) * ENEMY_FIRE_MUL) / bulletRate(),
+    shootCooldown: (random(1.2, 2.6) * ENEMY_FIRE_MUL * waveFireMul()) / bulletRate(),
+    fireRate: (random(1.6, 2.8) * ENEMY_FIRE_MUL * waveFireMul()) / bulletRate(),
     zigzag: false, seed: random(0, Math.PI * 2),
     value: 60, elite: false, formation: id,
     pathFn: null, pathTime: 0,
@@ -2208,7 +2227,7 @@ function runBossPattern(b) {
   const pick = (b.pattern++) % phasePool.length;
   const def = phasePool[pick];
   def.fire(b);
-  b.patternTimer = def.cooldown * (ENEMY_FIRE_MUL / bulletRate());
+  b.patternTimer = def.cooldown * (BOSS_FIRE_MUL / bulletRate()); // v24:Boss 用自己的節流,見常數區
 }
 
 function bossBullet(b, angle, speed, color, dmg, radius) {
