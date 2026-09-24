@@ -99,34 +99,36 @@ const DIFFICULTIES = {
     loot: 1.22,
     lives: 5,
   },
+  // v25(2026-09-24)使用者實機玩過 v24:「感覺還太鬆,再難一些」。這輪動的是「真人有感、幀級 bot 無感」的把手:
+  //   彈速(真人反應時間吃虧)、彈量、開場炸彈;簡單一樣不動。
   normal: {
     label: "普通",
-    enemyRate: 1,
+    enemyRate: 1.1,
     enemyHp: 1,
-    bulletRate: 1,
-    bulletSpeed: 1,
+    bulletRate: 1.3,
+    bulletSpeed: 1.12,
     bossHp: 1,
-    loot: 1,
+    loot: 0.9,
     lives: 3,
   },
   hard: {
     label: "硬派",
-    enemyRate: 1.3,
+    enemyRate: 1.4,
     enemyHp: 1.25,
-    bulletRate: 1.45,
-    bulletSpeed: 1.15,
+    bulletRate: 1.8,
+    bulletSpeed: 1.28,
     bossHp: 1.25,
-    loot: 0.8,   // 敵人多 ⇒ 掉寶多 ⇒ 補血多:量尺上硬派躺平 bot 一度活得比普通久,靠的就是這條;掉寶要跟著收
+    loot: 0.75,  // 敵人多 ⇒ 掉寶多 ⇒ 補血多:量尺上硬派躺平 bot 一度活得比普通久,靠的就是這條;掉寶要跟著收
     lives: 3,
   },
   storm: {
     label: "彈幕",
-    enemyRate: 1.6,
+    enemyRate: 1.75,
     enemyHp: 1.5,
-    bulletRate: 1.9,
-    bulletSpeed: 1.3,
+    bulletRate: 2.3,
+    bulletSpeed: 1.42,
     bossHp: 1.5,
-    loot: 0.65,
+    loot: 0.6,
     lives: 2,
   },
 };
@@ -250,16 +252,16 @@ const saveJSON = (k, v) => safeSet(k, JSON.stringify(v));
 
 const CHARACTERS = [
   { id: "alpha",    name: "Alpha 標準",   desc: "平衡型，火力均衡。",
-    hp: 10, lives: 3,  bombs: 10, fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0, skill: "slow" },
+    hp: 10, lives: 3,  bombs: 6,  fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0, skill: "slow" },
   { id: "blade",    name: "Blade 速攻",   desc: "速度與射速優異，但 HP 低。",
-    hp: 7,  lives: 3,  bombs: 8,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0, skill: "deflect" },
+    hp: 7,  lives: 3,  bombs: 5,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0, skill: "deflect" },
   { id: "fortress", name: "Fortress 重裝", desc: "高 HP、雙倍傷害、自帶護盾，但較慢。",
-    hp: 16, lives: 3,  bombs: 12, fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6, skill: "charge" },
+    hp: 16, lives: 3,  bombs: 8,  fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6, skill: "charge" },
   { id: "phantom",  name: "Phantom 幻影", desc: "聚焦再 -25% 速度，僚機 +1。需擊破 5 隻 Boss 解鎖。",
-    hp: 9,  lives: 3,  bombs: 10, fireRate: 0.20, speed: 300, dmg: 1, color: "#d7a6ff", startShield: 2,
+    hp: 9,  lives: 3,  bombs: 6,  fireRate: 0.20, speed: 300, dmg: 1, color: "#d7a6ff", startShield: 2,
     perk: "phantom", lockedBy: "boss-5", skill: "slow", skillCd: 16, skillDur: 4 },
   { id: "tempest",  name: "Tempest 風暴", desc: "射速 ×1.4、HP 低。需 100 連擊解鎖。",
-    hp: 6,  lives: 3,  bombs: 8,  fireRate: 0.13, speed: 340, dmg: 1, color: "#ff5d8f", startShield: 0,
+    hp: 6,  lives: 3,  bombs: 5,  fireRate: 0.13, speed: 340, dmg: 1, color: "#ff5d8f", startShield: 0,
     perk: "tempest", lockedBy: "combo-100", skill: "charge", skillCd: 11 },
 ];
 
@@ -1463,14 +1465,17 @@ function scaledBossHp(value) {
 }
 
 function scaledBulletSpeed(value) {
-  return value * difficultyConfig().bulletSpeed;
+  return value * difficultyConfig().bulletSpeed * waveBulletSpeedMul();
 }
 
 // v24:小兵開火隨波數加快 —— 量尺顯示以前第 30 波跟第 1 波一樣鬆(敵彈密度只看難度、不看進度),
-//   會閃的 bot 撐滿 30 波。每過一波冷卻 −1.8%,第 28 波起封頂在一半(= 開火密度 ×2)。
-//   不抽亂數、不進 world 流 ⇒ daily 出題完全不受影響(check-daily-determinism 仍綠)。
+//   會閃的 bot 撐滿 30 波。不抽亂數、不進 world 流 ⇒ daily 出題完全不受影響(check-daily-determinism 仍綠)。
+// v25:斜率 1.8% → 2.5%(第 21 波就到封頂 0.5 = 開火密度 ×2);另加彈速隨波 +1%/波、第 26 波封頂 +25%。
 function waveFireMul() {
-  return Math.max(0.5, 1 - (state.wave - 1) * 0.018);
+  return Math.max(0.5, 1 - (state.wave - 1) * 0.025);
+}
+function waveBulletSpeedMul() {
+  return Math.min(1.25, 1 + (state.wave - 1) * 0.01);
 }
 
 // =====================================================================
