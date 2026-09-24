@@ -19,9 +19,14 @@ const { chromium } = require("playwright-core");
 
 const URL = (process.argv[2] || "http://127.0.0.1:8011/").replace(/\/?$/, "/");
 const CAP = Number(process.argv[3] || 300);
-const SEEDS = [20260921, 777, 4242, 31337]; // 3 顆時「硬派躺平活得比普通久」的雜訊看得見,4 顆稍穩;要更準自己加
-const DIFFS = ["easy", "normal", "hard", "storm"];
-const BOTS = ["idle", "dodge"];
+// 環境變數可以縮範圍、加種子(A/B 兩版程式時用):MD_DIFFS=normal MD_BOTS=idle MD_SEEDS=10
+//   ⚠ v27 實錄:4 顆種子時「普通躺平」在更難的版本反而活更久 —— 掉寶/補血的 RNG 鏈一動,單顆種子的命運就翻盤,
+//   4 顆看不出趨勢。要判斷「有沒有變難」至少 10 顆、只跑要比的那一格,兩版各跑一次比平均。
+const BASE_SEEDS = [20260921, 777, 4242, 31337];
+const SEED_N = Number(process.env.MD_SEEDS || 0);
+const SEEDS = SEED_N > 0 ? Array.from({ length: SEED_N }, (_, i) => 1000 + i * 7919) : BASE_SEEDS;
+const DIFFS = (process.env.MD_DIFFS || "easy,normal,hard,storm").split(",").map((s) => s.trim()).filter(Boolean);
+const BOTS = (process.env.MD_BOTS || "idle,dodge").split(",").map((s) => s.trim()).filter(Boolean);
 
 const browser = await chromium.launch({ channel: "msedge", headless: true });
 const ctx = await browser.newContext({ viewport: { width: 900, height: 900 } });

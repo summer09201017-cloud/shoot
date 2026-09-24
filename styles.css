@@ -1137,3 +1137,16 @@ body.immersive #gameCanvas, body.mfs-fs #gameCanvas { height: 100svh; width: aut
     flex-direction: column;
   }
 }
+
+/* v27(2026-09-24)使用者實機截圖:「下方的 3 顆按鈕太大、太高了」。
+   手機直向時畫布是 3:5、螢幕約 1:2.1,畫布下面天生留一條 200px 左右的黑帶,四顆鈕(80/64/56/52)擠在裡面
+   佔掉大半寬度、看起來像半個畫面。縮到 60/52/48/44 —— 全部仍 ≥44px(艦隊觸控目標鐵則),間距跟著收。
+   只管直向;橫向那組(上面 fixed 到右側拇指區的 66/58/50)不動。放在檔尾是刻意的:要贏過 680px 那個區塊的 cascade。 */
+@media (max-width: 680px) and (orientation: portrait) {
+  .bomb-button  { right: 14px;  bottom: 14px; width: 60px; height: 60px; font-size: 0.78rem; letter-spacing: 0.04em; }
+  .focus-button { right: 84px;  bottom: 18px; width: 52px; height: 52px; font-size: 0.72rem; letter-spacing: 0.02em; }
+  .skill-button { right: 146px; bottom: 20px; width: 48px; height: 48px; }
+  .skill-button span  { font-size: 0.95rem; }
+  .skill-button small { font-size: 0.5rem; }
+  .pause-button { left: 14px;   bottom: 22px; width: 44px; height: 44px; font-size: 0.85rem; }
+}

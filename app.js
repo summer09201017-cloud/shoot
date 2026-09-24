@@ -1457,7 +1457,7 @@ function bulletRate() {
 }
 
 function scaledEnemyHp(value) {
-  return Math.max(1, Math.ceil(value * difficultyConfig().enemyHp));
+  return Math.max(1, Math.ceil(value * difficultyConfig().enemyHp * waveHpMul())); // v27:後期小兵更耐打
 }
 
 function scaledBossHp(value) {
@@ -1475,12 +1475,16 @@ function scaledBulletSpeed(value) {
 //   ⇒ 改成**曲線**:開頭比 v24 還鬆(第 1 波敵彈冷卻 ×1.55、彈速 ×0.9 ≈ 舊版普通),每波收緊,
 //     第 5 波 ≈ v24、第 9 波 ≈ v25 開頭、第 17 波起封頂(冷卻 ×0.5、彈速一路到 ×1.3)。
 //     前 3 波掉寶 ×1.35 讓武器早點到手。四個數字都在 WAVE_CURVE 一處,調曲線只動這裡。
+// v27(2026-09-24 晚)使用者玩過 v26(第 7 波、火力 20/20、剩 2 命 11 炸):「難度請再難一些」⇒ 曲線整體往上抬、爬得更陡,
+//   開頭仍比 v24 鬆一點(fireStart 1.45 > 1.3 = v24 等效),第 14 波到頂;另加小兵血量隨波、Boss 節奏隨波(見下方兩個函式)。
 const WAVE_CURVE = {
-  fireStart: 1.55, fireSlope: 0.065, fireFloor: 0.4,   // 冷卻倍率:1.55 → 每波 −0.065 → 0.4(第 19 波到頂 = 開火密度 ×2.5 於第 5 波)
-  speedStart: 0.9, speedSlope: 0.016, speedCap: 1.4,   // 彈速倍率:0.9 → 每波 +0.016 → 1.4(第 32 波到頂)
+  fireStart: 1.45, fireSlope: 0.085, fireFloor: 0.35,  // 冷卻倍率:1.45 → 每波 −0.085 → 0.35(第 14 波到頂 = 第 1 波密度的 4.1 倍)
+  speedStart: 0.9, speedSlope: 0.022, speedCap: 1.5,   // 彈速倍率:0.9 → 每波 +0.022 → 1.5(第 28 波到頂)
   lootEarlyWaves: 3, lootEarlyMul: 1.35,               // 前幾波掉寶加成:武器早點到手
   lootLateFrom: 12, lootLateMul: 0.85,                 // 中後段掉寶收一點:量尺上滿火力的躺平 bot 靠補血撐到第 30 波
   lootEndFrom: 20, lootEndMul: 0.7,
+  hpFrom: 8, hpSlope: 0.03, hpCap: 1.6,                // 小兵血量:第 8 波起每波 +3%、封頂 ×1.6(火力 20 的玩家後期不再秒殺一切)
+  bossFrom: 10, bossSlope: 0.02, bossFloor: 0.7,       // Boss 出招間隔:第 10 波起每波 −2%、封頂 ×0.7(第 25 波)
 };
 function waveFireMul() {
   return clamp(WAVE_CURVE.fireStart - (state.wave - 1) * WAVE_CURVE.fireSlope, WAVE_CURVE.fireFloor, WAVE_CURVE.fireStart);
@@ -1494,6 +1498,13 @@ function waveLootMul() {
   if (w >= WAVE_CURVE.lootEndFrom) return WAVE_CURVE.lootEndMul;
   if (w >= WAVE_CURVE.lootLateFrom) return WAVE_CURVE.lootLateMul;
   return 1;
+}
+// v27:小兵血量與 Boss 節奏也隨波。都不抽亂數(daily 出題不受影響)。
+function waveHpMul() {
+  return clamp(1 + Math.max(0, state.wave - WAVE_CURVE.hpFrom) * WAVE_CURVE.hpSlope, 1, WAVE_CURVE.hpCap);
+}
+function bossWaveMul() {
+  return clamp(1 - Math.max(0, state.wave - WAVE_CURVE.bossFrom) * WAVE_CURVE.bossSlope, WAVE_CURVE.bossFloor, 1);
 }
 
 // =====================================================================
@@ -2250,7 +2261,7 @@ function runBossPattern(b) {
   const pick = (b.pattern++) % phasePool.length;
   const def = phasePool[pick];
   def.fire(b);
-  b.patternTimer = def.cooldown * (BOSS_FIRE_MUL / bulletRate()); // v24:Boss 用自己的節流,見常數區
+  b.patternTimer = def.cooldown * (BOSS_FIRE_MUL / bulletRate()) * bossWaveMul(); // v24:Boss 自己的節流;v27:第 10 波起隨波加快
 }
 
 function bossBullet(b, angle, speed, color, dmg, radius) {
