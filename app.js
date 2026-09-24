@@ -108,7 +108,7 @@ const DIFFICULTIES = {
     bulletRate: 1.3,
     bulletSpeed: 1.12,
     bossHp: 1,
-    loot: 0.9,
+    loot: 1,     // v26:0.9 → 1(使用者「吃不到武器的寶物」;曲線的鬆緊交給 WAVE_CURVE,掉寶別再收)
     lives: 3,
   },
   hard: {
@@ -252,16 +252,16 @@ const saveJSON = (k, v) => safeSet(k, JSON.stringify(v));
 
 const CHARACTERS = [
   { id: "alpha",    name: "Alpha 標準",   desc: "平衡型，火力均衡。",
-    hp: 10, lives: 3,  bombs: 6,  fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0, skill: "slow" },
+    hp: 10, lives: 3,  bombs: 10, fireRate: 0.22, speed: 280, dmg: 1, color: "#66e4ff", startShield: 0, skill: "slow" },
   { id: "blade",    name: "Blade 速攻",   desc: "速度與射速優異，但 HP 低。",
-    hp: 7,  lives: 3,  bombs: 5,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0, skill: "deflect" },
+    hp: 7,  lives: 3,  bombs: 8,  fireRate: 0.16, speed: 360, dmg: 1, color: "#ff9a62", startShield: 0, skill: "deflect" },
   { id: "fortress", name: "Fortress 重裝", desc: "高 HP、雙倍傷害、自帶護盾，但較慢。",
-    hp: 16, lives: 3,  bombs: 8,  fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6, skill: "charge" },
+    hp: 16, lives: 3,  bombs: 12, fireRate: 0.28, speed: 220, dmg: 2, color: "#8cffbf", startShield: 6, skill: "charge" },
   { id: "phantom",  name: "Phantom 幻影", desc: "聚焦再 -25% 速度，僚機 +1。需擊破 5 隻 Boss 解鎖。",
-    hp: 9,  lives: 3,  bombs: 6,  fireRate: 0.20, speed: 300, dmg: 1, color: "#d7a6ff", startShield: 2,
+    hp: 9,  lives: 3,  bombs: 10, fireRate: 0.20, speed: 300, dmg: 1, color: "#d7a6ff", startShield: 2,
     perk: "phantom", lockedBy: "boss-5", skill: "slow", skillCd: 16, skillDur: 4 },
   { id: "tempest",  name: "Tempest 風暴", desc: "射速 ×1.4、HP 低。需 100 連擊解鎖。",
-    hp: 6,  lives: 3,  bombs: 5,  fireRate: 0.13, speed: 340, dmg: 1, color: "#ff5d8f", startShield: 0,
+    hp: 6,  lives: 3,  bombs: 8,  fireRate: 0.13, speed: 340, dmg: 1, color: "#ff5d8f", startShield: 0,
     perk: "tempest", lockedBy: "combo-100", skill: "charge", skillCd: 11 },
 ];
 
@@ -1470,12 +1470,30 @@ function scaledBulletSpeed(value) {
 
 // v24:小兵開火隨波數加快 —— 量尺顯示以前第 30 波跟第 1 波一樣鬆(敵彈密度只看難度、不看進度),
 //   會閃的 bot 撐滿 30 波。不抽亂數、不進 world 流 ⇒ daily 出題完全不受影響(check-daily-determinism 仍綠)。
-// v25:斜率 1.8% → 2.5%(第 21 波就到封頂 0.5 = 開火密度 ×2);另加彈速隨波 +1%/波、第 26 波封頂 +25%。
+// v25:斜率 1.8% → 2.5%;另加彈速隨波 +1%/波。
+// v26(2026-09-24)使用者玩過 v25:「一開頭有點難,炸彈太少,一直殺不完敵人、吃不到武器的寶物;想一開頭簡單一點,但後面才難一些」
+//   ⇒ 改成**曲線**:開頭比 v24 還鬆(第 1 波敵彈冷卻 ×1.55、彈速 ×0.9 ≈ 舊版普通),每波收緊,
+//     第 5 波 ≈ v24、第 9 波 ≈ v25 開頭、第 17 波起封頂(冷卻 ×0.5、彈速一路到 ×1.3)。
+//     前 3 波掉寶 ×1.35 讓武器早點到手。四個數字都在 WAVE_CURVE 一處,調曲線只動這裡。
+const WAVE_CURVE = {
+  fireStart: 1.55, fireSlope: 0.065, fireFloor: 0.4,   // 冷卻倍率:1.55 → 每波 −0.065 → 0.4(第 19 波到頂 = 開火密度 ×2.5 於第 5 波)
+  speedStart: 0.9, speedSlope: 0.016, speedCap: 1.4,   // 彈速倍率:0.9 → 每波 +0.016 → 1.4(第 32 波到頂)
+  lootEarlyWaves: 3, lootEarlyMul: 1.35,               // 前幾波掉寶加成:武器早點到手
+  lootLateFrom: 12, lootLateMul: 0.85,                 // 中後段掉寶收一點:量尺上滿火力的躺平 bot 靠補血撐到第 30 波
+  lootEndFrom: 20, lootEndMul: 0.7,
+};
 function waveFireMul() {
-  return Math.max(0.5, 1 - (state.wave - 1) * 0.025);
+  return clamp(WAVE_CURVE.fireStart - (state.wave - 1) * WAVE_CURVE.fireSlope, WAVE_CURVE.fireFloor, WAVE_CURVE.fireStart);
 }
 function waveBulletSpeedMul() {
-  return Math.min(1.25, 1 + (state.wave - 1) * 0.01);
+  return clamp(WAVE_CURVE.speedStart + (state.wave - 1) * WAVE_CURVE.speedSlope, WAVE_CURVE.speedStart, WAVE_CURVE.speedCap);
+}
+function waveLootMul() {
+  const w = state.wave;
+  if (w <= WAVE_CURVE.lootEarlyWaves) return WAVE_CURVE.lootEarlyMul;
+  if (w >= WAVE_CURVE.lootEndFrom) return WAVE_CURVE.lootEndMul;
+  if (w >= WAVE_CURVE.lootLateFrom) return WAVE_CURVE.lootLateMul;
+  return 1;
 }
 
 // =====================================================================
@@ -2522,7 +2540,7 @@ function destroyEnemy(enemy, bombed = false) {
     }
   }
 
-  const dropChance = (enemy.elite ? 0.78 : 0.22) * difficultyConfig().loot;
+  const dropChance = (enemy.elite ? 0.78 : 0.22) * difficultyConfig().loot * waveLootMul(); // v26:前 3 波掉寶加成
   if (!bombed && rand() < dropChance) spawnLoot(enemy.x, enemy.y);
   else if (bombed && rand() < 0.05) spawnLoot(enemy.x, enemy.y);
 }

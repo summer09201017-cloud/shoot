@@ -165,9 +165,13 @@ const startGame = async (page) => { await ev(page, () => document.getElementById
   ok(sk.skin === "deep" && sk.ls === "deep" && /深海/.test(sk.body), "Q 選深海皮膚 ⇒ 存起來、選單文案換", JSON.stringify(sk));
   await page.screenshot({ path: OUT + "v21-deep-menu.png" });
   await startGame(page); await page.waitForTimeout(300);
-  const hy = await ev(page, async () => { state.players[0].grace = 0; state.players[0].invincible = 99; startBossWarning("hydra", {}); spawnBoss("hydra", false); const b = state.boss; b.arrived = true; await new Promise((r) => setTimeout(r, 4500)); const eb = state.enemyBullets; return { name: b.name, type: b.type, total: eb.length, split: eb.filter((x) => x.split).length, homing: eb.filter((x) => x.homing).length, alive: !!state.boss, sprite: !!sprites["boss_hydra_deep"], enemySprite: (() => { const s = skinSprite("enemy_basic"); return !!s; })() }; });
+  // v26 改量法:原本是「4.5 秒後畫面上**活著**的敵彈 > 5」的快照 —— 那是跟 v23 的 Boss 節奏綁死的:
+  //   v25 起 Boss 出招間隔跟難度 bulletRate 走(普通快 30%),快照那一刻剛好只剩一組扇形彈 4~5 顆 ⇒ 假紅
+  //   (線上 v25 第一輪紅過一次、本機 v26 連紅兩次,Boss 本身完全正常)。改成 4.5 秒內**累計**發出的敵彈:每 40ms 掃一次,
+  //   沒看過的物件才算,順便記分裂彈/魚雷有沒有出現。改 Boss 節奏時這項若紅,先分清「節奏變了」還是「Boss 壞了」。
+  const hy = await ev(page, async () => { state.players[0].grace = 0; state.players[0].invincible = 99; startBossWarning("hydra", {}); spawnBoss("hydra", false); const b = state.boss; b.arrived = true; const seen = new WeakSet(); let total = 0, split = 0, homing = 0; const t0 = performance.now(); while (performance.now() - t0 < 4500) { for (const x of state.enemyBullets) { if (!seen.has(x)) { seen.add(x); total++; if (x.split) split++; if (x.homing) homing++; } } await new Promise((r) => setTimeout(r, 40)); } return { name: b.name, type: b.type, total, split, homing, alive: !!state.boss, sprite: !!sprites["boss_hydra_deep"], enemySprite: (() => { const s = skinSprite("enemy_basic"); return !!s; })() }; });
   ok(hy.type === "hydra" && /九頭海怪/.test(hy.name), "Q 深海皮膚下 hydra 名字「九頭海怪」", JSON.stringify(hy));
-  ok(hy.total > 5 && hy.alive && hy.enemySprite, `Q hydra 招式 4.5 秒放出 ${hy.total} 顆彈(其中分裂彈 ${hy.split}、魚雷 ${hy.homing}),沒有例外`, JSON.stringify(hy));
+  ok(hy.total > 5 && hy.alive && hy.enemySprite, `Q hydra 招式 4.5 秒內累計放出 ${hy.total} 顆彈(其中分裂彈 ${hy.split}、魚雷 ${hy.homing}),沒有例外`, JSON.stringify(hy));
   await page.screenshot({ path: OUT + "v21-deep-hydra.png" });
   const spl = await ev(page, async () => { state.enemyBullets = [{ x: 240, y: 300, vx: 0, vy: 40, radius: 9, color: "#7dffdf", damage: 1, fromBoss: true, split: { t: 0.3, count: 6, speed: 120, color: "#7dffdf" } }]; await new Promise((r) => setTimeout(r, 650)); return { n: state.enemyBullets.filter((b) => !b.split).length }; });
   ok(spl.n >= 6, `Q 分裂彈 0.3s 後變 ${spl.n} 顆小彈`, JSON.stringify(spl));
