@@ -15,6 +15,20 @@
     (待辦看 CLAUDE.md 檔尾「CP 值待辦」;權威來源仍是 skills repo 大表的雷電提案列)。
 
 
+★★★★★ 2026-09-24 深夜(HFP 機・Sonnet 5・0920-更名-家裡 場)v28:武器列貼齊下方按鈕(使用者截圖:「武器：散彈 那一列也要往下降,降到三個按鈕上方,中間不要有間隙」)
+--------------------------------------------------------------------------------
+■ 純版面,不動玩法/難度。病灶:直向手機 `.canvas-wrap` 拉滿整個視窗高度、畫布置中,上下各留約 120px 黑帶;
+  `.overlay.bottom-left`(武器 chip + 4 分頁)是抄桌機版的 `bottom:110px`,直向時上半部壓在畫布上、
+  下半部才進黑帶,跟按鈕之間空 36px。
+■ 修法:量出最高的 `.bomb-button`(bottom14+height60=74),把 `.overlay.bottom-left` 在同一個 portrait
+  媒體查詢裡改成 `bottom:74px`,兩邊的邊完全對齊。只加一行 CSS(styles.css v27 那個 portrait 區塊裡)。
+  ⚠ 74 這個數字跟 `.bomb-button` 的直向尺寸綁在一起,以後改 BOMB 的 bottom/height 要一起改這裡。
+■ 驗法(一次性,沒進 repo):Playwright 390×844 量 getBoundingClientRect,改前 gap=36px、改後 gap=0px;
+  elementFromPoint 打四顆鈕中心確認沒被 weapon-slots(pointer-events:auto)搶觸控,四顆都命中自己。
+■ 驗收:check-vertag 11 綠、verify-behaviour 88/88(本機+線上)、check-daily-determinism 綠、線上 sw v28。
+■ 下一件若使用者再回報版面問題:先用同一支量尺(getBoundingClientRect + elementFromPoint)量出實際像素,
+  不要憑截圖目測喬數字。
+
 ★★★★★ 2026-09-24 夜(HFP 機・Fable 5.1・0920-更名-家裡 場)v27:再難一些 + 手機下方按鈕縮小(使用者第 7 波截圖:「下方的 3 顆按鈕太大、太高了,難度請再難一些」)
 --------------------------------------------------------------------------------
 ■ 難度(全在 app.js WAVE_CURVE + 兩個新函式,細節見 CLAUDE.md「🎚 難度」v27 小節):

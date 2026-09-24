@@ -209,6 +209,19 @@ PWA 必須走 HTTP/HTTPS，不能用 `file://`。
   只管直向;橫向那組(fixed 到右側拇指區)不動。放檔尾是為了贏過 680px 區塊的 cascade。截圖驗過(`SHOT_DIR=… node scripts/measure-landscape.mjs`)。
 - 簡單、命數、開場炸彈、每日出題不動。
 
+**v28(2026-09-24 夜)第五輪:武器列貼齊下方按鈕** —— 使用者截圖:「武器：散彈 基本 雷射那一列,也要往下降,降到下面三個按鈕的上方,中間不要有間隙」。
+- 純版面題,不動玩法/難度。病灶:直向手機時 `.canvas-wrap` **拉滿整個視窗高度**、`#gameCanvas` 用 flex 置中,
+  畫布(362×603 於 390×844 視窗)上下各留約 120px 黑帶。`.overlay.bottom-left`(武器 chip + 4 個武器分頁)原本是
+  抄桌機版的 `bottom: 110px`,在直向反而讓武器列上半部壓在畫布(遊戲畫面)上、下半部才進黑帶,跟按鈕之間空一截。
+- 修法:量出四顆鈕裡最高的 `.bomb-button`(`bottom:14px + height:60px = 74`),把 `.overlay.bottom-left` 的
+  `bottom` 在同一個 portrait 媒體查詢裡改成 **74px**,兩者的邊完全對齊(零間隙、零重疊)。
+  只加一行 CSS,常數 `74` 跟 `.bomb-button` 的直向尺寸綁在一起 —— **以後改 BOMB 的直向 bottom/height 要一起改這裡**。
+- 驗法(一次性,沒進 repo,需要時照這個寫法重建):Playwright 開 390×844,`getBoundingClientRect()` 量
+  `.overlay.bottom-left` 與四顆鈕,改前 gap=36px、改後 gap=0px;另外 `elementFromPoint` 打四顆鈕中心,
+  確認命中的還是鈕本身(`.weapon-slots` 是 `pointer-events:auto`,貼太近會怕搶觸控,量過沒有)。
+- 驗收:check-vertag 11 綠、verify-behaviour 88/88(本機 + 線上,無斷言碰這段版面,純新增不影響既有測試)、
+  check-daily-determinism 綠(CSS-only,理應不受影響,仍照跑confirm)。線上 sw v28。
+
 ## 已知地雷區
 
 - **`ENEMY_FIRE_MUL`(v24 起 2.6;Boss 另有 `BOSS_FIRE_MUL` 3.6)** 是全域敵彈密度節流。改了會大幅影響難度 —— **改完必跑 measure-difficulty**

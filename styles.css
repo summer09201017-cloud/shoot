@@ -1149,4 +1149,13 @@ body.immersive #gameCanvas, body.mfs-fs #gameCanvas { height: 100svh; width: aut
   .skill-button span  { font-size: 0.95rem; }
   .skill-button small { font-size: 0.5rem; }
   .pause-button { left: 14px;   bottom: 22px; width: 44px; height: 44px; font-size: 0.85rem; }
+
+  /* v28(2026-09-24)使用者實機截圖:「武器：散彈 那一列,也要往下降,降到下面三個按鈕的上方,中間不要有間隙」。
+     canvas-wrap 在直向會**拉滿整個視窗高度**、畫布置中,所以畫布下面天生一條黑帶(390×844 量到 724~769,約 45px)。
+     舊版 .overlay.bottom-left 是 bottom:110px,那個數字是抄桌機版沒改過的 —— 在直向反而讓武器列的上半部
+     壓在畫布(遊戲畫面)上,下半部才進黑帶,跟按鈕之間空出一截。改成跟最高的那顆鈕(BOMB:bottom14+高60=74)
+     算齊,兩者的邊完全對齊、零間隙也零重疊。量法:C:/Users/HFP/AppData/Local/Temp/…/inspect-layout.mjs
+     (量 .overlay.bottom-left 與四顆鈕的 getBoundingClientRect,不是憑眼睛喬)。
+     ⚠ 這個 74 是跟 .bomb-button 的 14+60 綁在一起的常數,以後改 BOMB 的直向尺寸/位置要一起改這裡。 */
+  .overlay.bottom-left { bottom: 74px; }
 }
